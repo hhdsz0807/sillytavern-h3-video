@@ -419,16 +419,15 @@
     } else status('err', '这个浏览器不支持自动复制');
   }
 
-  const INJECT = `[H3 视频任务] 这次回复在正文之后，必须再写一个视频提示词块，供 MiniMax H3 把这段正文变成 15 秒视频。硬性要求：
-1) 用 [[H3]] 开头、[[/H3]] 结尾，中间只有六段，段名照抄且顺序固定：subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music。
-2) 内容必须**从你刚才这段正文里提取**：真实出现的角色、地点、动作、台词、时间。不要照抄格式说明、不要留占位符、不要写正文里没出现的人。
-3) 除台词外全部英文；台词原样用 <d>[Chinese] 台词</d> 包起来。正文里没有台词就不写台词。
-4) 角色按出场顺序写成 <Subject 1>、<Subject 2>…，在 subject_definitions 里逐个描述脸型/发色/瞳色/服装；场景单独写一个 <Subject>。用户会按这个顺序给角色四视图和场景图（场景图是最后一张），所以用 <Picture 1..N> 对应说明。
-5) 三处画风锁必须写：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
-6) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
-7) 画面里只出现正文里的角色，其余座位与背景空无一人。
-8) detailed_description 逐镜头：第 1 镜不写时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；有台词就写清第几秒开口、第几秒说完，说话人必须在画面里。
-9) 六段之外不要任何解释文字，也不要再重复正文。`;
+  const INJECT = `[H3 视频] 这次回复正文之后，按 MiniMax H3 官方全参考模式（Ref2VA）补一个提示词块：[[H3]] 开头、[[/H3]] 结尾，六段顺序固定 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。
+要点（官方格式）：
+1) 六段用英文；台词保留原语言，写成 <d>[Chinese] …</d>。
+2) subject_definitions 里把人物/场景/道具定义成 <Subject N>；参考图只用于身份/场景时，把来源写进该 Subject（如 <Subject 1> is the young woman in <Picture 1>, …），不单独写 <Picture N> 行；只有当某图就是某镜首帧/关键帧时才单独写 <Picture N> is the first frame of [Shot 1] …。
+3) summary 一段英文，以 [reference generation] 这类方括号任务类型开头，只用已定义标签。
+4) retention_analysis 每个标签一行：<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - …（或 partially_preserved / attribute_transfer / weak_reference），这里不写 (Sx)。
+5) detailed_description 先一到两句风格，再逐镜头：[Shot 1] 无时间戳，第 2 镜起 [Shot N] At MM:SS.mmm, …；写清构图、主体外观与位置、环境光线、动作、镜头运动、同期声；说话人用 (S1)(S2)，引用主体写 <Subject N> (Sx)；生成类任务 350–500 英文词。
+6) overall_soundscape 写全片环境声与物理声；non_diegetic_music 写只有观众听到的配乐（没有就 N/A）。
+7) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。`;
 
   function applyInjection(verbose) {
     const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
@@ -450,18 +449,17 @@
   /* ---------- AI 按正文生成六段 ---------- */
   let CURTEXT = '';
 
-  const SIX_SYS = `你是 MiniMax H3 视频提示词作者。用户给你一段角色扮演/小说正文，你要把它改写成一条 15 秒视频的提示词。
-只输出六段，用 [[H3]] 开头、[[/H3]] 结尾，段名照抄且顺序固定：subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music。
-硬规则：
-1) 内容必须来自正文：真实出现的人物、地点、动作、台词、时间段。不要编造正文里没有的人或场景。
-2) 不要照抄任何格式说明或占位符（如“角色A：脸型…”）；每一句都要是具体描述。
-3) 除台词外全部英文；台词原样用 <d>[Chinese] 台词</d>。正文没有台词就不要写台词。
-4) 人物按出场顺序写成 <Subject 1>、<Subject 2>…，在 subject_definitions 里描述脸型/发色/瞳色/服装/体态；场景单独一个 <Subject>。用户会给每个角色一张四视图、场景图最后一张，所以用 <Picture 1..N> 对应说明。
-5) 三处画风锁必须写：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
-6) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
-7) 画面里只出现正文里的角色，其余座位与背景空无一人。
-8) detailed_description 逐镜头：第 1 镜不写时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；说话人必须在画面里，台词写清第几秒开口、第几秒说完。
-9) 六段以外不要任何解释。`;
+  const SIX_SYS = `你是 MiniMax H3 全参考模式（Ref2VA）提示词作者。把用户给的正文改写成官方六段格式，只输出六段：[[H3]] 开头、[[/H3]] 结尾，段名与顺序严格为 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。
+
+官方规则：
+1) 六段全写英文；只有台词、歌词、画面里可见的文字保留原语言，台词写成 <d>[Chinese] …</d>。
+2) subject_definitions：把要复用的可见内容逐个定义为 <Subject N>（人物、场景、服装道具等），每个一行，说明标签指什么、主要特征。参考图仅用于定义角色/场景/服装/风格时，不要单独写 <Picture N> 行，把来源写进对应 Subject，例如：<Subject 1> is the young woman in <Picture 1>, with long dark hair, wearing …, 只有当某张图本身是某镜首帧/关键帧/尾帧/构图锚点时，才单独写 <Picture N> is the first frame of [Shot 1], …
+3) summary：一段英文，以方括号任务类型开头（如 [reference generation]），只用已定义的标签，不引入新标签。
+4) retention_analysis：每个标签一行，格式 <Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - …；可选标记 partially_preserved / attribute_transfer / weak_reference；这里不写 (Sx)。
+5) detailed_description：先一到两句全片风格，再逐镜头。[Shot 1] 不带时间戳；第 2 镜起 [Shot N] At MM:SS.mmm, …。每镜写清构图、主体外观与位置、环境与光线、动作与状态变化、镜头运动、同期声音，以及参考内容出现的准确时点。说话人给稳定编号 (S1)(S2)…，引用主体时写 <Subject N> (Sx)。生成类任务正文约 350–500 英文词。
+6) overall_soundscape：全片环境声与物理声概述（对白与逐镜同步音留在 detailed_description）。
+7) non_diegetic_music：只有观众能听到的配乐，写乐器/速度/动态；没有就写 N/A。
+8) 总时长必须与用户给的秒数一致；不要写成剧情梗概。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
@@ -598,34 +596,28 @@
     openPanel(messageTextOf(b) || lastMessageText());
   }, true);
 
-  const TEMPLATE = `【给角色卡 / 世界书 / 作者注释用】
-每次回复正文写完后，另起一行输出下面这个块，不要解释、不要代码围栏：
-
-[[H3]]
+  const TEMPLATE = `[[H3]]
 subject_definitions:
-<Picture 1> is the identity anchor for <Subject 1>: …（角色A：脸型/发色/瞳色/服装）
-<Picture 2> is the identity anchor for <Subject 2>: …（角色B）
-<Picture N> is <Subject M>: …（场景图，放最后一张）
-<Subject 1> is drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.
-<Subject 2> is painted in the same flat 2D anime style as <Subject 1>.
-Each reference sheet is an identity reference only: each character appears exactly once; never reproduce a character sheet, panels, borders or labels; no letters, subtitles or watermarks.
+<Subject 1> is the woman in <Picture 1>, with long dark hair and a light-blue cardigan.
+<Subject 2> is the man in <Picture 2>, with short black hair and a grey jacket.
+<Subject 3> is the environment in <Picture 3>, a window-side booth with pale wooden partitions and late-afternoon light.
 
 summary:
-[reference generation] 一句话说清这场戏，并强调画面里只有指定角色（其余座位/背景空无一人）。
+[reference generation] The target video shows <Subject 1> and <Subject 2> inside <Subject 3> in a single quiet exchange.
 
 retention_analysis:
-<Subject 1> (appears in [Shot 1] … [Shot N]): fully_preserved - 保留脸/发/眼/服装
-<Subject 2> (…): fully_preserved - …
-<Subject N> (…): fully_preserved - 保留场景陈设与光线
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - identity, hair and clothing are retained.
+<Subject 2> (appears in [Shot 1]): fully_preserved - identity and clothing are retained.
+<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - furniture, props and lighting are retained.
 
 detailed_description:
-平涂 2D 动画，16:9，光线说明，镜头稳。
-[Shot 1] 景别/机位/动作/表情。说话人：<Subject 1> 说 <d>[Chinese] 台词原文</d>，第一句 0.4 秒开口、3.0 秒说完。
-[Shot 2] At 00:05.500 …（第 2 镜起必须带时间戳）
-[Shot 3] At 00:10.000 …
+The target video uses a flat 2D anime cel style with warm late-afternoon window light.
+[Shot 1] A medium two-shot across the table inside <Subject 3>. <Subject 2> sits on screen right facing <Subject 1>. He looks down, then up, and says, <d>[Chinese] 抱歉。</d>
+[Shot 2] At 00:05.500, the shot cuts to a close-up of <Subject 1> from the front. She forces a small smile and answers, <d>[Chinese] 不要道歉啊。</d> She looks down at her hands.
 
 overall_soundscape:
-环境底噪 + 与动作同步的拟音（杯冰、椅子、脚步），台词近麦。
+Quiet restaurant room tone with soft ice-shifting sounds and one chair scrape.
+
 non_diegetic_music:
 N/A
 [[/H3]]`;
