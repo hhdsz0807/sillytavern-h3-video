@@ -117,6 +117,10 @@
             <button id="h3v-models" style="flex:none">拉取模型</button>
             <button id="h3v-testapi" style="flex:none">测 API</button>
           </div>
+          <div class="row"><label>max_tokens</label>
+            <input type="text" id="h3v-maxtok" value="100000" style="max-width:120px;flex:none" placeholder="100000">
+            <span class="hint">默认 10 万；服务端嫌大时会自动退到 8192 重试</span>
+          </div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用预设采样参数（温度/top_p/惩罚/stop/seed）</label></div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePresetPrompt" checked> 把预设里的提示词也作为参考带上</label></div>
           <p class="hint">填地址后点「拉取模型」，列表从 /models 自动取，不用手打模型名。</p>
@@ -206,6 +210,10 @@
       $('#h3v-aiModel').onchange = () => { S.aiModel = $('#h3v-aiModel').value; saveS(); };
       $('#h3v-models').onclick = fetchModels;
       if ($('#h3v-testapi')) $('#h3v-testapi').onclick = testApi;
+      if ($('#h3v-maxtok')) {
+        $('#h3v-maxtok').value = String(S.maxTokens || 100000);
+        $('#h3v-maxtok').onchange = function () { S.maxTokens = Number($('#h3v-maxtok').value) || 100000; saveS(); };
+      }
       if ($('#h3v-usePreset')) {
         $('#h3v-usePreset').checked = S.usePreset !== false;
         $('#h3v-usePreset').onchange = function () { S.usePreset = $('#h3v-usePreset').checked; saveS(); };
@@ -605,7 +613,7 @@
   }
 
   async function stGenerate(sys, user, len) {
-    const maxLen = len || 1600;
+    const maxLen = Number(S.maxTokens || 100000);
     const ctx = window.SillyTavern.getContext();
     if (!ctx) throw new Error('拿不到 SillyTavern 上下文');
     const tries = [];
@@ -613,14 +621,14 @@
     // 1) 上下文里自带
     if (typeof ctx.generateQuietPrompt === 'function') {
       try {
-        const r = await withTimeout(ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen }), 90000, '酒馆安静生成 ');
+        const r = await withTimeout(ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: Math.max(maxLen, Number(S.maxTokens || 100000)) }), 90000, '酒馆安静生成 ');
         if (r) return String(r);
       } catch (e) { tries.push('ctx.generateQuietPrompt: ' + e.message); }
     }
     // 2) generateRaw（换几种参数写法，绕开 "No message generated"）
     if (typeof ctx.generateRaw === 'function') {
       const variants = [
-        { systemPrompt: sys, prompt: user, responseLength: maxLen },
+        { systemPrompt: sys, prompt: user, responseLength: Math.max(maxLen, Number(S.maxTokens || 100000)) },
         { systemPrompt: sys, prompt: user },
         { prompt: sys + '\n\n' + user },
         { prompt: user },
@@ -637,13 +645,13 @@
     const mod = await loadSTScript();
     if (mod && typeof mod.generateQuietPrompt === 'function') {
       try {
-        const r = await withTimeout(mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen }), 90000, '酒馆安静生成2 ');
+        const r = await withTimeout(mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: Math.max(maxLen, Number(S.maxTokens || 100000)) }), 90000, '酒馆安静生成2 ');
         if (r) return String(r);
       } catch (e) { tries.push('script.generateQuietPrompt: ' + e.message); }
     }
     if (mod && typeof mod.generateRaw === 'function') {
       try {
-        const r = await withTimeout(mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen }), 45000, '酒馆 raw 生成2 ');
+        const r = await withTimeout(mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: Math.max(maxLen, Number(S.maxTokens || 100000)) }), 45000, '酒馆 raw 生成2 ');
         if (r) return String(r);
       } catch (e) { tries.push('script.generateRaw: ' + e.message); }
     }
@@ -817,7 +825,7 @@
       if (s.seed != null && s.seed !== -1 && s.seed !== '') out.seed = s.seed;
       if (s.repetition_penalty != null && s.repetition_penalty !== 1) out.repetition_penalty = s.repetition_penalty;
     } catch (_) {}
-    out.max_tokens = len || 1600;
+    out.max_tokens = Number(S.maxTokens || 100000);
     return out;
   }
 
@@ -897,12 +905,12 @@
     const model = (S.aiModel || '').trim();
     if (!base) throw new Error('先填自定义 API 地址');
     if (!model) throw new Error('先点「拉取模型」选一个');
-    const params = (S.usePreset === false) ? { max_tokens: (len || 1600) } : presetParams(len);
+    const params = (S.usePreset === false) ? { max_tokens: Number(S.maxTokens || 100000) } : presetParams(len);
     const bodyObj = Object.assign({
       model: model, stream: false,
       messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
     }, params);
-    let maxTok = params.max_tokens || 1600;
+    let maxTok = Number(S.maxTokens || 100000);
     for (let attempt = 0; attempt < 2; attempt++) {
       const body = Object.assign({}, bodyObj, { max_tokens: maxTok });
       if (attempt > 0) {
@@ -912,7 +920,19 @@
           return { role: m.role, content: m.content + '\n\n（重要：不要输出思考过程或 reasoning，直接给出最终结果正文。）' };
         });
       }
-      const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, body, 'AI 请求');
+      let resp;
+      try {
+        resp = await postJSON(urlCandidates(base, '/chat/completions'), key, body, 'AI 请求');
+      } catch (e) {
+        const m = String(e && e.message || '');
+        if (attempt === 0 && /max_tokens|maximum context|too large|token limit|400/i.test(m)) {
+          maxTok = 8192;
+          LOG('服务端嫌 max_tokens 大，退到 8192 重试：' + m.slice(0, 120));
+          continue;
+        }
+        throw e;
+      }
+      const { j, txt, url } = resp;
       if (j.error) throw new Error((j.error.message || JSON.stringify(j.error)).slice(0, 180));
       const out = extractText(j);
       if (out) return String(out);
