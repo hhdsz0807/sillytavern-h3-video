@@ -609,7 +609,8 @@
 7) non_diegetic_music：只有观众能听到的配乐，写乐器/速度/动态；没有就写 N/A。
 8) 正文里的心理活动、内心独白（斜体、*…*、【心想】这类）要转成画外音旁白，写在 detailed_description 里：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；角色真正说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两种都要保留，不要丢。
 9) 六段每段只出现一次；不要在 detailed_description 里重新开始写 subject_definitions / summary / retention_analysis。
-10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。`;
+10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。
+12) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
@@ -1026,6 +1027,15 @@
         try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
+        if (b && !/<Picture\s*\d/i.test(b)) {
+          try {
+            jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（补 Picture 引用）');
+            const retryUser = user + '\n\n注意：上一版一个 Picture 编号都没写。本次必须在 subject_definitions 里给每个角色/场景标注参考图编号（<Subject 1> is … in <Picture 1>、<Subject 2> is … in <Picture 2>），并在 detailed_description 首次出现时写 the shot begins from <Picture 1> 之类。';
+            const out2 = await callAI(SIX_SYS, retryUser, 4000);
+            const b2 = extractPrompt(out2) || String(out2 || '').trim();
+            if (b2 && /<Picture\s*\d/i.test(b2)) b = b2;
+          } catch (e) { LOG('picture retry fail', i, e); }
+        }
         if (b) { const nb = normalizeBlock(b); blocks.push(nb); lastBlock = nb; }
         await new Promise(r => setTimeout(r, 200));
       }
