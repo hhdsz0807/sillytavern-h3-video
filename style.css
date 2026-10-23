@@ -1,30 +1,35 @@
-/* H3 视频工坊 —— 酒馆扩展样式 */
-#h3v-fab {
-  position: fixed; right: 14px; bottom: 96px; z-index: 4000;
-  width: 46px; height: 46px; border-radius: 50%;
-  background: #2f81f7; color: #fff; border: none;
-  font-size: 20px; line-height: 46px; text-align: center;
-  box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer;
+/* H3 视频工坊 —— 酒馆扩展样式（弹窗版） */
+#h3v-mask {
+  position: fixed; inset: 0; z-index: 99998;
+  background: rgba(0,0,0,.55); display: none;
 }
+#h3v-mask.on { display: block; }
+
 #h3v-panel {
-  position: fixed; right: 12px; bottom: 150px; z-index: 4001;
-  width: min(420px, calc(100vw - 24px)); max-height: 72vh; overflow: auto;
+  position: fixed; z-index: 99999;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, 94vw); max-height: 88vh; overflow: auto;
   background: #121820; color: #dfe7f0; border: 1px solid #26303c;
-  border-radius: 12px; padding: 12px 14px; display: none;
-  box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 13px;
+  border-radius: 14px; padding: 14px 16px; display: none;
+  box-shadow: 0 18px 50px rgba(0,0,0,.65); font-size: 13px;
+  -webkit-overflow-scrolling: touch;
 }
 #h3v-panel.on { display: block; }
-#h3v-panel h3 { margin: 0 0 8px; font-size: 14px; }
-#h3v-panel .row { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; flex-wrap: wrap; }
-#h3v-panel label { min-width: 66px; color: #8b98ab; font-size: 12px; }
+#h3v-panel h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+#h3v-panel h3 .x {
+  margin-left: auto; cursor: pointer; font-size: 20px; line-height: 1;
+  color: #8b98ab; padding: 2px 6px;
+}
+#h3v-panel .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+#h3v-panel label { min-width: 68px; color: #8b98ab; font-size: 12px; }
 #h3v-panel input[type=text], #h3v-panel select, #h3v-panel textarea {
   background: #1c222c; color: #e6ebf2; border: 1px solid #2a3240;
-  border-radius: 6px; padding: 6px 8px; font: inherit; flex: 1; min-width: 90px;
+  border-radius: 6px; padding: 7px 9px; font: inherit; flex: 1; min-width: 90px;
 }
-#h3v-panel textarea { width: 100%; min-height: 120px; font-size: 12px; line-height: 1.5; }
+#h3v-panel textarea { width: 100%; min-height: 130px; font-size: 12px; line-height: 1.5; }
 #h3v-panel button {
   background: #1c222c; color: #dfe7f0; border: 1px solid #2a3240;
-  border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer;
+  border-radius: 6px; padding: 7px 13px; font: inherit; cursor: pointer;
 }
 #h3v-panel button.primary { background: #2f81f7; border-color: #2f81f7; color: #fff; font-weight: 600; }
 #h3v-panel button:disabled { opacity: .5; }
@@ -36,7 +41,16 @@
 #h3v-status.run { border-left: 3px solid #d29922; }
 #h3v-out video { width: 100%; border-radius: 8px; margin-top: 8px; background: #000; }
 #h3v-out a { color: #2f81f7; font-size: 12px; }
-.h3v-msgbtn {
-  display: inline-block; margin-left: 6px; cursor: pointer; opacity: .75;
+
+#h3v-fab {
+  position: fixed; right: 14px; bottom: 96px; z-index: 99997;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: #2f81f7; color: #fff; border: none;
+  font-size: 20px; line-height: 46px; text-align: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer;
 }
-.h3v-msgbtn:hover { opacity: 1; }
+.h3v-msgbtn {
+  display: inline-block; margin: 4px 0 0 2px; cursor: pointer;
+  opacity: .8; font-size: 15px; user-select: none; padding: 2px 4px;
+}
+.h3v-msgbtn:active, .h3v-msgbtn:hover { opacity: 1; }
