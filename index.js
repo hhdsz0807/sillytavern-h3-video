@@ -569,7 +569,7 @@
 7) 心理活动/内心独白转成画外音旁白：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；真说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两者都不要丢。
 8) 六段各出现一次，不要在 detailed_description 里重开 subject_definitions。
 9) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。
-10) 人名、地名、台词、服装颜色一律来自正文；不许套用任何示例里的名字或句子（例如 woman in a light-blue cardigan、抱歉 / 不要道歉啊 这类），不许留括号占位符。`;
+10) 人名、地名、台词、服装颜色一律来自正文；不许套用任何示例里的名字或句子（例如 woman in a light-blue cardigan、抱歉 / 不要道歉啊 这类），不许留括号占位符。\n11) 人物名必须用正文里的**原字**（中文或日文），不要音译成罗马字；同一角色在所有分段里用完全相同的一个名字。`;
 
   function applyInjection(verbose) {
     const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
@@ -726,6 +726,24 @@
 <Subject 2>: 场景名 + 关键陈设与光线
 规则：只写正文里出现过的；外观写具体（颜色、款式），不写情绪；人物按出场顺序编号；最多 6 行；不要解释。`;
 
+  function dedupSections(s) {
+    const names = ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'overall_soundscape', 'non_diegetic_music'];
+    const lines = s.split('\n');
+    const seen = {};
+    const out = [];
+    let skipping = false;
+    for (const line of lines) {
+      const m = line.match(/^\s*(subject_definitions|summary|retention_analysis|detailed_description|overall_soundscape|non_diegetic_music)\s*:?\s*$/i);
+      if (m) {
+        const key = m[1].toLowerCase();
+        if (seen[key]) { skipping = true; continue; }
+        seen[key] = true; skipping = false; out.push(line); continue;
+      }
+      if (!skipping) out.push(line);
+    }
+    return out.join('\n');
+  }
+
   function normalizeBlock(b) {
     let s = String(b || '');
     s = s.replace(/^#{1,6}\s*/gm, '');
@@ -733,8 +751,8 @@
     s = s.replace(new RegExp('\\*\\*(' + names + ')\\*\\*:?', 'gi'), '$1:');
     s = s.replace(new RegExp('<(' + names + ')>:?', 'gi'), '$1:');
     s = s.replace(new RegExp('</(' + names + ')>', 'gi'), '');
-    s = s.split('\n').filter(l => !/(选项|卡片|caption|字幕|界面文字|按钮|option cards?|选择肢)/i.test(l)).join('\n');
-    return s.trim();
+    s = s.split('\n').filter(l => !/(选项|卡片|caption|字幕|界面|按钮|选择肢|option\s*(card|line|list|interface)|interface\s*(overlay|element|glow)|blinking cursor|tip text|subtitle|on-screen ui)/i.test(l)).join('\n');
+    return dedupSections(s).trim();
   }
   const PLAN_SYS = `你是视频分镜规划器。读用户给的正文，判断整段完整演完需要多少秒（按真实节奏估，不硬砍也不注水），并按每段最多 15 秒、最少 4 秒切分。
 只输出纯文本，格式严格如下，不要解释、不要代码块：
