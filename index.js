@@ -863,6 +863,7 @@
         }
       }
       if (typeof ch.text === 'string' && ch.text.trim()) return ch.text;
+      if (ch.finish_reason === 'length') return '';
       if (ch.delta && typeof ch.delta.content === 'string' && ch.delta.content.trim()) return ch.delta.content;
     }
     if (typeof j.content === 'string' && j.content.trim()) return j.content;
@@ -901,13 +902,33 @@
       model: model, stream: false,
       messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
     }, params);
-    const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, bodyObj, 'AI 请求');
-    if (j.error) throw new Error((j.error.message || JSON.stringify(j.error)).slice(0, 180));
-    const out = extractText(j);
-    if (!out) {
-      throw new Error('接口回了但没有正文（' + url + '）：' + String(txt || '').slice(0, 400));
+    let maxTok = params.max_tokens || 1600;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const body = Object.assign({}, bodyObj, { max_tokens: maxTok });
+      if (attempt > 0) {
+        // 推理模型常常把 token 全花在 reasoning 上，第二次强制“只给结果”
+        body.messages = bodyObj.messages.map(function (m, i, arr) {
+          if (i !== arr.length - 1) return m;
+          return { role: m.role, content: m.content + '\n\n（重要：不要输出思考过程或 reasoning，直接给出最终结果正文。）' };
+        });
+      }
+      const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, body, 'AI 请求');
+      if (j.error) throw new Error((j.error.message || JSON.stringify(j.error)).slice(0, 180));
+      const out = extractText(j);
+      if (out) return String(out);
+      const ch0 = j.choices && j.choices[0];
+      const msg = ch0 && ch0.message;
+      const reasoning = msg && (msg.reasoning_content || msg.reasoning);
+      const truncated = ch0 && ch0.finish_reason === 'length';
+      if (attempt === 0 && (reasoning || truncated)) {
+        maxTok = Math.max(4000, maxTok * 3);
+        LOG('空正文(推理' + (reasoning ? '有' : '无') + '/截断' + (truncated ? '是' : '否') + ')，max_tokens 提到 ' + maxTok + ' 重试');
+        continue;
+      }
+      const why = reasoning ? '（模型只输出了推理 reasoning_content，正文为空）' : (truncated ? '（被 max_tokens 截断）' : '');
+      throw new Error('接口回了但正文为空' + why + '（' + url + '）：' + String(txt || '').slice(0, 380));
     }
-    return String(out);
+    return '';
   }
 
   async function genSix() {
@@ -918,11 +939,11 @@
     const t0 = Date.now();
     try {
       status('run', '① 先估时长 / 排分镜…');
-      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""', 900);
+      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""', 2000);
       const plan = parsePlan(planTxt);
       status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
       let castText = '';
-      try { castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 600)).trim(); } catch (e) { LOG('cast fail', e); }
+      try { castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200)).trim(); } catch (e) { LOG('cast fail', e); }
       status('run', '角色外观已锁定（' + (castText ? castText.split('\n').length : 0) + ' 行）；开始逐段写六段…');
 
       const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
@@ -938,7 +959,7 @@
           + '<Subject N> 编号沿用全片编号；只拍这一段的事。';
         status('run', '第 ' + (i + 1) + ' / ' + plan.segs.length + ' 段生成中…（' + sec + 's）');
         let out = '';
-        try { out = await callAI(SIX_SYS, user, 2600); } catch (e) { LOG('seg fail', i, e); }
+        try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
         if (b) blocks.push(normalizeBlock(b));
