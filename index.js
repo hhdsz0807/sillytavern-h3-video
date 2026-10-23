@@ -489,12 +489,14 @@
     const sec = blockSeconds(b);
     const btn = $('#h3v-run');
     btn.disabled = true;
+    jobBegin('生成视频 · 第' + (idx + 1) + '条');
     try {
       const r = await runOne(b, sec, '第' + (idx + 1) + '条');
       showVideos(r, '第 ' + (idx + 1) + ' 条 · ' + sec + 's');
       status('ok', '第' + (idx + 1) + '条完成 · 用时 ' + Math.floor(r.secs / 60) + ' 分 ' + (r.secs % 60) + ' 秒'
         + (r.coins ? ' · ' + r.coins + ' 币' : ''));
     } catch (e) { status('err', '失败：' + e.message); }
+    finally { jobEnd(); }
     btn.disabled = false;
     refreshBlockList();
   }
@@ -505,10 +507,11 @@
     if (blocks.length === 1) return runVideo();
     const btn = $('#h3v-runAll');
     btn.disabled = true;
+    jobBegin('批量生成视频');
     let okN = 0, coins = 0;
     for (let i = 0; i < blocks.length; i++) {
       const sec = blockSeconds(blocks[i]);
-      status('run', '第 ' + (i + 1) + ' / ' + blocks.length + ' 条提交中…（' + sec + 's）');
+      jobLabel('批量生成视频 · 第 ' + (i + 1) + '/' + blocks.length + ' 条');
       try {
         const r = await runOne(blocks[i], sec, '第' + (i + 1) + '/' + blocks.length + '条');
         okN++; coins += r.coins;
@@ -518,19 +521,28 @@
         await new Promise(r => setTimeout(r, 1500));
       }
     }
+    jobEnd();
     btn.disabled = false;
     status('ok', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
   }
 
-  let TICK = null;
-  function tick(prefix) {
-    clearInterval(TICK);
-    const t0 = Date.now();
-    TICK = setInterval(function () {
-      status('run', prefix + ' · 已等 ' + Math.round((Date.now() - t0) / 1000) + ' 秒…');
-    }, 2000);
-    return function () { clearInterval(TICK); TICK = null; };
+  const JOB = { t0: 0, label: '', timer: null };
+  function jobPaint() {
+    if (!JOB.t0) return;
+    const tot = Math.round((Date.now() - JOB.t0) / 1000);
+    const m = Math.floor(tot / 60), s = tot % 60;
+    status('run', (JOB.label || '处理中') + ' · 累计 ' + (m ? m + ' 分 ' + s + ' 秒' : s + ' 秒') + '…');
   }
+  function jobBegin(label) {
+    jobEnd();
+    JOB.t0 = Date.now();
+    JOB.label = label || '';
+    JOB.timer = setInterval(jobPaint, 1000);
+    jobPaint();
+  }
+  function jobLabel(label) { JOB.label = label; jobPaint(); }
+  function jobEnd() { if (JOB.timer) clearInterval(JOB.timer); JOB.timer = null; JOB.t0 = 0; JOB.label = ''; }
+  function tick(prefix) { jobLabel(prefix); return function () {}; }
   function status(kind, text) {
     const el = $('#h3v-status');
     if (!el) { LOG(kind, text); return; }
@@ -793,7 +805,8 @@
     return [sys + '\n\n【酒馆对话补全预设里的提示词（风格与规则参考，冲突时以上面的六段规范为准）】\n' + extra, user];
   }
   function callAI(sys, user, len) {
-    const stop = tick(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
+    jobLabel(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
+    const stop = function () {};
     const p = withPreset(sys, user).then(function (pair) {
       return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
     });
@@ -952,6 +965,7 @@
   }
 
   async function genSix() {
+    jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
     const btn = $('#h3v-gen');
@@ -977,7 +991,7 @@
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
           + '<Subject N> 编号沿用全片编号；只拍这一段的事。';
-        status('run', '第 ' + (i + 1) + ' / ' + plan.segs.length + ' 段生成中…（' + sec + 's）');
+        jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
         let out = '';
         try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
@@ -991,7 +1005,7 @@
       status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
     } catch (e) {
       status('err', '生成失败：' + (e && e.message ? e.message : e));
-    }
+    } finally { jobEnd(); }
     btn.disabled = false;
   }
 
