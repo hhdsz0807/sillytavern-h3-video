@@ -116,6 +116,7 @@
             <select id="h3v-aiModel" style="flex:1"></select>
             <button id="h3v-models" style="flex:none">拉取模型</button>
           </div>
+          <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用酒馆「对话补全预设」参数（温度/top_p/惩罚/stop/seed，只是不用酒馆的模型和连接）</label></div>
           <p class="hint">填地址后点「拉取模型」，列表从 /models 自动取，不用手打模型名。</p>
         </div>
 
@@ -747,6 +748,24 @@
       + '\n(ctx 可用项 ' + Object.keys(ctx).length + ' 个)');
   }
 
+  function presetParams(len) {
+    // 套用酒馆当前「对话补全预设」的采样参数（不套模型、不套连接）
+    const out = {};
+    try {
+      const ctx = window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
+      const s = (ctx && ctx.chatCompletionSettings) || {};
+      if (s.temperature != null) out.temperature = s.temperature;
+      if (s.top_p != null && s.top_p !== 0) out.top_p = s.top_p;
+      if (s.presence_penalty != null) out.presence_penalty = s.presence_penalty;
+      if (s.frequency_penalty != null) out.frequency_penalty = s.frequency_penalty;
+      if (Array.isArray(s.stop)) { const st = s.stop.filter(Boolean); if (st.length) out.stop = st; }
+      if (s.seed != null && s.seed !== -1 && s.seed !== '') out.seed = s.seed;
+      if (s.repetition_penalty != null && s.repetition_penalty !== 1) out.repetition_penalty = s.repetition_penalty;
+    } catch (_) {}
+    out.max_tokens = len || 1600;
+    return out;
+  }
+
   async function apiGenerate(sys, user, len) {
     const base = (S.aiBase || '').trim().replace(/\/+$/, '');
     const key = (S.aiKey || '').trim();
@@ -754,10 +773,14 @@
     if (!base) throw new Error('先填自定义 API 地址');
     if (!model) throw new Error('先点「拉取模型」选一个');
     const url = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
+    const params = (S.usePreset === false) ? { max_tokens: (len || 1600) } : presetParams(len);
     const r = await withTimeout(fetch(url, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
-      body: JSON.stringify({ model: model, temperature: 0.6, max_tokens: (len || 1600), stream: false, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }),
+      body: JSON.stringify(Object.assign({
+        model: model, stream: false,
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+      }, params)),
     }), 90000, 'AI 请求 ');
     const t = await r.text();
     let j = null; try { j = JSON.parse(t); } catch (_) {}
@@ -768,7 +791,6 @@
     if (!txt) throw new Error('AI 没返回内容');
     return String(txt);
   }
-
   async function genSix() {
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
