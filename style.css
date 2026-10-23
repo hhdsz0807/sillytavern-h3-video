@@ -40,6 +40,7 @@
 #h3v-dlg .hint { color: #7d8b9b; font-size: 12px; }
 #h3v-status { background: #1c222c; border-radius: 8px; padding: 9px; margin-top: 8px; white-space: pre-wrap; font-size: 12px; display: none; word-break: break-word; }
 #h3v-status.on { display: block; }
+#h3v-dlg .foot #h3v-status { margin-top: 0; }
 #h3v-status.err { border-left: 3px solid #f85149; }
 #h3v-status.ok { border-left: 3px solid #3fb950; }
 #h3v-status.run { border-left: 3px solid #d29922; }
