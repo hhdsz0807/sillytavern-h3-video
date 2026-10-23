@@ -106,7 +106,7 @@
             <option value="st">用酒馆当前连接 / 对话补全预设（和主界面一样）</option>
             <option value="api">自定义 API</option>
           </select>
-          <button class="primary" id="h3v-gen" style="flex:none">按正文生成六段</button>
+          <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
@@ -462,7 +462,7 @@
 
   async function runVideo() {
     const blocks = parseBlocks($('#h3v-prompt').value);
-    if (!blocks.length) { status('err', '没有提示词：点「按正文生成六段」或直接粘'); return; }
+    if (!blocks.length) { status('err', '没有提示词：点「按正文生成（自动分段）」或直接粘'); return; }
     const sel = Number(($('#h3v-block') || {}).value || 0);
     const idx = Math.min(sel, blocks.length - 1);
     const b = blocks[idx];
@@ -546,7 +546,7 @@
     if (verbose) status(ok ? 'ok' : 'err', ok ? (on ? '已把「输出六段」注入提示词' : '已关闭注入') : '注入失败：' + why);
   }
 
-  /* ---------- AI 按正文生成六段 ---------- */
+  /* ---------- AI 按正文生成（自动分段） ---------- */
   let CURTEXT = '';
 
   const SIX_SYS = `你是 MiniMax H3 全参考模式（Ref2VA）提示词作者。把用户给的正文改写成官方六段格式。
@@ -582,7 +582,8 @@
     } catch (e) { LOG('import script.js fail', e); return null; }
   }
 
-  async function stGenerate(sys, user) {
+  async function stGenerate(sys, user, len) {
+    const maxLen = len || 1600;
     const ctx = window.SillyTavern.getContext();
     if (!ctx) throw new Error('拿不到 SillyTavern 上下文');
     const tries = [];
@@ -590,14 +591,14 @@
     // 1) 上下文里自带
     if (typeof ctx.generateQuietPrompt === 'function') {
       try {
-        const r = await ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: 1600 });
+        const r = await ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen });
         if (r) return String(r);
       } catch (e) { tries.push('ctx.generateQuietPrompt: ' + e.message); }
     }
     // 2) generateRaw
     if (typeof ctx.generateRaw === 'function') {
       try {
-        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1600 });
+        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen });
         if (r) return String(r);
       } catch (e) { tries.push('ctx.generateRaw: ' + e.message); }
     }
@@ -605,26 +606,26 @@
     const mod = await loadSTScript();
     if (mod && typeof mod.generateQuietPrompt === 'function') {
       try {
-        const r = await mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: 1600 });
+        const r = await mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen });
         if (r) return String(r);
       } catch (e) { tries.push('script.generateQuietPrompt: ' + e.message); }
     }
     if (mod && typeof mod.generateRaw === 'function') {
       try {
-        const r = await mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1600 });
+        const r = await mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen });
         if (r) return String(r);
       } catch (e) { tries.push('script.generateRaw: ' + e.message); }
     }
     // 4) 直接打酒馆自己的补全代理（用当前连接设置）
     try {
-      const r = await proxyGenerate(sys, user);
+      const r = await proxyGenerate(sys, user, maxLen);
       if (r) return r;
     } catch (e) { tries.push('backend proxy: ' + e.message); }
 
     throw new Error('都试过了没用：' + (tries.join(' | ') || '没有可用的生成接口'));
   }
 
-  async function proxyGenerate(sys, user) {
+  async function proxyGenerate(sys, user, len) {
     const ctx = window.SillyTavern.getContext();
     const s = ctx.chatCompletionSettings || {};
     const src = s.chat_completion_source || 'openai';
@@ -634,7 +635,7 @@
       model: model,
       messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
       temperature: (s.temperature != null ? s.temperature : 0.7),
-      max_tokens: 1600,
+      max_tokens: len || 1600,
       stream: false,
     };
     ['reverse_proxy', 'proxy_password', 'proxy_url', 'custom_url', 'custom_include_body', 'custom_exclude_body',
@@ -655,6 +656,37 @@
     return String(txt);
   }
 
+  /* ---------- 两步：先规划时长与分镜，再逐段写六段 ---------- */
+  const PLAN_SYS = `你是视频分镜规划器。读用户给的正文，判断整段完整演完需要多少秒（按真实节奏估，不硬砍也不注水），并按每段最多 15 秒、最少 4 秒切分。
+只输出纯文本，格式严格如下，不要解释、不要代码块：
+总时长: 120s
+1|0-15|这一段的画面与动作要点（含说出口的台词、内心独白）
+2|15-30|…
+（每行一段，段数与总时长匹配；最后一段不超过 15 秒）`;
+
+  function parsePlan(text) {
+    const out = { total: 0, segs: [] };
+    const mt = String(text || '').match(/总时长\s*[:：]\s*(\d+(?:\.\d+)?)\s*s/i);
+    if (mt) out.total = Number(mt[1]);
+    const re = /^\s*(\d+)\s*[|｜]\s*(\d+(?:\.\d+)?)\s*[-–~]\s*(\d+(?:\.\d+)?)\s*[|｜]\s*(.+)$/gm;
+    let m;
+    while ((m = re.exec(text || ''))) {
+      out.segs.push({ i: Number(m[1]), from: Number(m[2]), to: Number(m[3]), beat: m[4].trim() });
+    }
+    if (!out.segs.length) {
+      // 兜底：按总时长或 15 秒切
+      const total = out.total || 15;
+      const n = Math.max(1, Math.min(12, Math.ceil(total / 15)));
+      for (let i = 0; i < n; i++) out.segs.push({ i: i + 1, from: i * 15, to: Math.min((i + 1) * 15, total), beat: '' });
+    }
+    if (!out.total) out.total = out.segs[out.segs.length - 1].to;
+    return out;
+  }
+
+  function callAI(sys, user, len) {
+    return (S.aiMode === 'api') ? apiGenerate(sys, user, len) : stGenerate(sys, user, len);
+  }
+
   function aiDiag() {
     const ctx = window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
     if (!ctx) { status('err', '拿不到 SillyTavern.getContext()'); return; }
@@ -666,7 +698,7 @@
       + '\n(ctx 可用项 ' + Object.keys(ctx).length + ' 个)');
   }
 
-  async function apiGenerate(sys, user) {
+  async function apiGenerate(sys, user, len) {
     const base = (S.aiBase || '').trim().replace(/\/+$/, '');
     const key = (S.aiKey || '').trim();
     const model = (S.aiModel || '').trim();
@@ -676,7 +708,7 @@
     const r = await withTimeout(fetch(url, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
-      body: JSON.stringify({ model: model, temperature: 0.6, stream: false, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }),
+      body: JSON.stringify({ model: model, temperature: 0.6, max_tokens: (len || 1600), stream: false, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }),
     }), 90000, 'AI 请求 ');
     const t = await r.text();
     let j = null; try { j = JSON.parse(t); } catch (_) {}
@@ -694,11 +726,34 @@
     const btn = $('#h3v-gen');
     btn.disabled = true;
     const t0 = Date.now();
-    status('run', S.aiMode === 'st' ? '用酒馆当前连接/预设生成中…' : '调用自定义 API 生成中…');
     try {
-      const out = (S.aiMode === 'st') ? await stGenerate(SIX_SYS, sixUser(text)) : await apiGenerate(SIX_SYS, sixUser(text));
-      $('#h3v-prompt').value = extractPrompt(out) || out;
-      status('ok', '六段已生成（' + (S.aiMode === 'st' ? '酒馆预设' : S.aiModel) + ' · ' + Math.round((Date.now() - t0) / 1000) + ' 秒）');
+      status('run', '① 先估时长 / 排分镜…');
+      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""', 900);
+      const plan = parsePlan(planTxt);
+      status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；开始逐段写六段…');
+
+      const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
+      const blocks = [];
+      for (let i = 0; i < plan.segs.length; i++) {
+        const seg = plan.segs[i];
+        const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
+        const user = '正文：\n"""\n' + text + '\n"""\n\n'
+          + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
+          + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
+          + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
+          + '<Subject N> 编号沿用全片编号；只拍这一段的事。';
+        status('run', '第 ' + (i + 1) + ' / ' + plan.segs.length + ' 段生成中…（' + sec + 's）');
+        let out = '';
+        try { out = await callAI(SIX_SYS, user, 2600); } catch (e) { LOG('seg fail', i, e); }
+        let b = extractPrompt(out);
+        if (!b) b = String(out || '').trim();
+        if (b) blocks.push(b);
+        await new Promise(r => setTimeout(r, 200));
+      }
+      if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
+      $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\[\/H3\]\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
+      refreshBlockList();
+      status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
     } catch (e) {
       status('err', '生成失败：' + (e && e.message ? e.message : e));
     }
