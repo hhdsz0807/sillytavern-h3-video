@@ -1,40 +1,54 @@
-/* H3 视频工坊 —— 酒馆扩展样式（弹窗版） */
+/* H3 视频工坊 —— 酒馆扩展样式（满屏面板版，手机上一定能滚能关） */
 #h3v-mask {
   position: fixed; inset: 0; z-index: 99998;
-  background: rgba(0,0,0,.55); display: none;
+  background: rgba(0,0,0,.6); display: none;
 }
 #h3v-mask.on { display: block; }
 
 #h3v-panel {
-  position: fixed; z-index: 99999;
-  left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: min(560px, 94vw); max-height: 88vh; overflow: auto;
-  background: #121820; color: #dfe7f0; border: 1px solid #26303c;
-  border-radius: 14px; padding: 14px 16px; display: none;
-  box-shadow: 0 18px 50px rgba(0,0,0,.65); font-size: 13px;
-  -webkit-overflow-scrolling: touch;
+  position: fixed; inset: 0; z-index: 99999;
+  background: #121820; color: #dfe7f0;
+  display: none; flex-direction: column; font-size: 13px;
 }
-#h3v-panel.on { display: block; }
-#h3v-panel h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-#h3v-panel h3 .x {
-  margin-left: auto; cursor: pointer; font-size: 20px; line-height: 1;
-  color: #8b98ab; padding: 2px 6px;
+#h3v-panel.on { display: flex; }
+
+#h3v-panel .bar {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: #0e141b; border-bottom: 1px solid #26303c;
+  position: sticky; top: 0; z-index: 2;
 }
+#h3v-panel .bar b { font-size: 15px; }
+#h3v-panel .bar .sp { flex: 1; }
+#h3v-panel .bar button {
+  background: #1c222c; color: #dfe7f0; border: 1px solid #2a3240;
+  border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
+}
+#h3v-panel .bar button.close { background: #3a1f22; border-color: #6b2b2d; color: #ffb3ad; font-weight: 600; }
+
+#h3v-panel .body {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 12px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
 #h3v-panel .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 #h3v-panel label { min-width: 68px; color: #8b98ab; font-size: 12px; }
 #h3v-panel input[type=text], #h3v-panel select, #h3v-panel textarea {
   background: #1c222c; color: #e6ebf2; border: 1px solid #2a3240;
-  border-radius: 6px; padding: 7px 9px; font: inherit; flex: 1; min-width: 90px;
+  border-radius: 6px; padding: 8px 9px; font: inherit; flex: 1; min-width: 90px;
 }
-#h3v-panel textarea { width: 100%; min-height: 130px; font-size: 12px; line-height: 1.5; }
-#h3v-panel button {
+#h3v-panel textarea { width: 100%; min-height: 140px; font-size: 12px; line-height: 1.5; }
+#h3v-panel .body > button, #h3v-panel .row button {
   background: #1c222c; color: #dfe7f0; border: 1px solid #2a3240;
-  border-radius: 6px; padding: 7px 13px; font: inherit; cursor: pointer;
+  border-radius: 8px; padding: 9px 14px; font: inherit; cursor: pointer;
 }
-#h3v-panel button.primary { background: #2f81f7; border-color: #2f81f7; color: #fff; font-weight: 600; }
+#h3v-panel .row button.primary, #h3v-panel button.primary {
+  background: #2f81f7; border-color: #2f81f7; color: #fff; font-weight: 600;
+}
 #h3v-panel button:disabled { opacity: .5; }
 #h3v-panel .hint { color: #7d8b9b; font-size: 12px; }
-#h3v-status { background: #1c222c; border-radius: 6px; padding: 8px; margin-top: 8px; white-space: pre-wrap; font-size: 12px; display: none; }
+#h3v-status { background: #1c222c; border-radius: 8px; padding: 9px; margin-top: 8px; white-space: pre-wrap; font-size: 12px; display: none; word-break: break-word; }
 #h3v-status.on { display: block; }
 #h3v-status.err { border-left: 3px solid #f85149; }
 #h3v-status.ok { border-left: 3px solid #3fb950; }
@@ -51,6 +65,6 @@
 }
 .h3v-msgbtn {
   display: inline-block; margin: 4px 0 0 2px; cursor: pointer;
-  opacity: .8; font-size: 15px; user-select: none; padding: 2px 4px;
+  opacity: .85; font-size: 16px; user-select: none; padding: 4px 6px;
 }
 .h3v-msgbtn:active, .h3v-msgbtn:hover { opacity: 1; }

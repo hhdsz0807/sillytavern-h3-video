@@ -63,43 +63,54 @@
     const p = document.createElement('div');
     p.id = 'h3v-panel';
     p.innerHTML = `
-      <h3>🎬 H3 视频工坊 <span class="hint" style="font-weight:400">→ 手机 H3工作台</span><span class="x" id="h3v-x">✕</span></h3>
-
-      <div class="row">
-        <label>H3 地址</label>
-        <input type="text" id="h3v-host" value="${esc(S.host)}" placeholder="http://127.0.0.1:8899">
-        <button id="h3v-ping">测试连接</button>
+      <div class="bar">
+        <b>🎬 H3 视频工坊</b>
+        <span class="hint">→ 手机 H3工作台</span>
+        <span class="sp"></span>
+        <button class="close" id="h3v-x">关闭 ✕</button>
       </div>
 
-      <div class="row"><label>四视图</label><span class="hint">顺序 = &lt;Picture 1..N&gt;；角色几号放几号</span></div>
-      <div id="h3v-views"></div>
+      <div class="body">
+        <div class="row">
+          <label>H3 地址</label>
+          <input type="text" id="h3v-host" value="${esc(S.host)}" placeholder="http://127.0.0.1:8899">
+          <button id="h3v-ping">测试连接</button>
+        </div>
 
-      <div class="row"><label>场景图</label>
-        <select id="h3v-scene" style="flex:1"></select>
-        <button id="h3v-sceneUp">传</button>
+        <div class="row"><label>四视图</label><span class="hint">顺序 = &lt;Picture 1..N&gt;；角色几号放几号</span></div>
+        <div id="h3v-views"></div>
+
+        <div class="row"><label>场景图</label>
+          <select id="h3v-scene" style="flex:1"></select>
+          <button id="h3v-sceneUp">传</button>
+        </div>
+
+        <div class="row">
+          <label>时长(秒)</label><input type="text" id="h3v-sec" value="${esc(S.seconds)}" style="max-width:64px;flex:none">
+          <label style="min-width:auto">清晰度</label>
+          <select id="h3v-mp" style="max-width:160px;flex:none">
+            <option value="0.5">0.5MP 960×544</option>
+            <option value="0.98">0.98MP 1344×768</option>
+            <option value="1.5">1.5MP 1664×928</option>
+          </select>
+          <label style="min-width:auto">步数</label><input type="text" id="h3v-steps" value="${esc(S.steps)}" style="max-width:56px;flex:none">
+        </div>
+
+        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
+        <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
+
+        <div class="row" style="margin-top:8px">
+          <button class="primary" id="h3v-run">生成视频</button>
+          <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
+        </div>
+
+        <div id="h3v-status"></div>
+        <div id="h3v-out"></div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="close" id="h3v-x2" style="flex:1">关闭面板</button>
+        </div>
       </div>
-
-      <div class="row">
-        <label>时长(秒)</label><input type="text" id="h3v-sec" value="${esc(S.seconds)}" style="max-width:64px;flex:none">
-        <label style="min-width:auto">清晰度</label>
-        <select id="h3v-mp" style="max-width:160px;flex:none">
-          <option value="0.5">0.5MP 960×544</option>
-          <option value="0.98">0.98MP 1344×768</option>
-          <option value="1.5">1.5MP 1664×928</option>
-        </select>
-        <label style="min-width:auto">步数</label><input type="text" id="h3v-steps" value="${esc(S.steps)}" style="max-width:56px;flex:none">
-      </div>
-
-      <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
-      <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
-
-      <div class="row" style="margin-top:8px">
-        <button class="primary" id="h3v-run">生成视频</button>
-        <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
-      </div>
-
-      <div id="h3v-status"></div>
-      <div id="h3v-out"></div>
     `;
     document.body.appendChild(p);
 
@@ -114,6 +125,7 @@
     }
 
     $('#h3v-x').onclick = closePanel;
+    $('#h3v-x2').onclick = closePanel;
     $('#h3v-host').onchange = () => { S.host = ($('#h3v-host').value || DEFA.host).trim().replace(/\/+$/, ''); saveS(); loadMeta(); };
     $('#h3v-ping').onclick = () => loadMeta();
     $('#h3v-sec').onchange = () => { S.seconds = Number($('#h3v-sec').value) || 12; saveS(); };
