@@ -874,30 +874,31 @@
     openPanel(messageTextOf(b) || lastMessageText());
   }, true);
 
-  const TEMPLATE = `[[H3]]
+  const TEMPLATE = `【这是填空用的骨架，不是成品：把 (…) 换成你这段正文里真实的人物/地点/台词】
+[[H3]]
 subject_definitions:
-<Subject 1> is the woman in <Picture 1>, with long dark hair and a light-blue cardigan.
-<Subject 2> is the man in <Picture 2>, with short black hair and a grey jacket.
-<Subject 3> is the environment in <Picture 3>, a window-side booth with pale wooden partitions and late-afternoon light.
+<Subject 1> is (角色A的名字与固定外观：年龄/发型/瞳色/服装/是否赤脚), from <Picture 1>.
+<Subject 2> is (角色B的名字与固定外观), from <Picture 2>.
+<Subject 3> is (场景名与关键陈设、光线), from <Picture 3>.
 
 summary:
-[reference generation] The target video shows <Subject 1> and <Subject 2> inside <Subject 3> in a single quiet exchange.
+[reference generation] (一句话：谁在哪里做了什么，结局停在哪)
 
 retention_analysis:
-<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - identity, hair and clothing are retained.
-<Subject 2> (appears in [Shot 1]): fully_preserved - identity and clothing are retained.
-<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - furniture, props and lighting are retained.
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - (保留哪些外观特征)
+<Subject 2> (appears in [Shot 1]): fully_preserved - (同上)
+<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - (保留陈设与光线)
 
 detailed_description:
-The target video uses a flat 2D anime cel style with warm late-afternoon window light.
-[Shot 1] A medium two-shot across the table inside <Subject 3>. <Subject 2> sits on screen right facing <Subject 1>. He looks down, then up, and says, <d>[Chinese] 抱歉。</d>
-[Shot 2] At 00:05.500, the shot cuts to a close-up of <Subject 1> from the front. She forces a small smile and answers, <d>[Chinese] 不要道歉啊。</d> She looks down at her hands.
+(一到两句全片风格与光线)
+[Shot 1] (景别/机位/主体位置/动作)。(说话人) (S1) says, <d>[Chinese] (台词原文)</d>
+[Shot 2] At 00:05.500, (切到什么景别、发生了什么)。(内心独白用画外音) <Subject 1> (S1, off-screen voice-over) says, <d>[Chinese] (内心话)</d>
 
 overall_soundscape:
-Quiet restaurant room tone with soft ice-shifting sounds and one chair scrape.
+(环境底噪 + 与动作同步的拟音)
 
 non_diegetic_music:
-N/A
+(配乐或 N/A)
 [[/H3]]`;
 
   /* ---------- 启动 ---------- */
