@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: true, views: ['', '', '', '', '', ''], scene: '' };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: true, views: ['', '', '', '', '', ''], scene: '', inject: false, aiMode: 'st', aiBase: '', aiKey: '', aiModel: '' };
 
   let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
@@ -81,7 +81,7 @@
         <img id="h3v-scenePv" class="pv" alt="">
 
         <div class="row">
-          <label style="min-width:auto"><input type="checkbox" id="h3v-inject" checked> 自动要求模型输出六段</label>
+          <label style="min-width:auto"><input type="checkbox" id="h3v-inject" ${S.inject ? 'checked' : ''}> 自动要求模型输出六段</label>
           <button id="h3v-injectBtn">立即注入</button>
           <span class="hint" id="h3v-injectState"></span>
         </div>
@@ -99,6 +99,24 @@
 
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
+
+        <div class="row">
+          <label>AI 补全</label>
+          <select id="h3v-aiMode" style="flex:1">
+            <option value="st">用酒馆当前连接 / 对话补全预设（和主界面一样）</option>
+            <option value="api">自定义 API</option>
+          </select>
+          <button class="primary" id="h3v-gen" style="flex:none">按正文生成六段</button>
+        </div>
+        <div id="h3v-apiBox" style="display:none">
+          <div class="row"><label>API 地址</label><input type="text" id="h3v-aiBase" placeholder="https://api.deepseek.com/v1"></div>
+          <div class="row"><label>API Key</label><input type="password" id="h3v-aiKey" placeholder="sk-…（只存本机）"></div>
+          <div class="row"><label>模型</label>
+            <select id="h3v-aiModel" style="flex:1"></select>
+            <button id="h3v-models" style="flex:none">拉取模型</button>
+          </div>
+          <p class="hint">填地址后点「拉取模型」，列表从 /models 自动取，不用手打模型名。</p>
+        </div>
 
         <div class="row" style="margin-top:8px">
           <button class="primary" id="h3v-run">生成视频</button>
@@ -161,6 +179,20 @@
     }
     if ($('#h3v-injectBtn')) $('#h3v-injectBtn').onclick = () => applyInjection(true);
 
+    if ($('#h3v-aiMode')) {
+      $('#h3v-aiMode').value = S.aiMode || 'st';
+      $('#h3v-aiMode').onchange = () => { S.aiMode = $('#h3v-aiMode').value; saveS(); syncAiMode(); };
+      $('#h3v-aiBase').value = S.aiBase || '';
+      $('#h3v-aiKey').value = S.aiKey || '';
+      $('#h3v-aiBase').onchange = () => { S.aiBase = $('#h3v-aiBase').value.trim(); saveS(); };
+      $('#h3v-aiKey').onchange = () => { S.aiKey = $('#h3v-aiKey').value.trim(); saveS(); };
+      $('#h3v-aiModel').onchange = () => { S.aiModel = $('#h3v-aiModel').value; saveS(); };
+      $('#h3v-models').onclick = fetchModels;
+      if (S.aiModel) $('#h3v-aiModel').innerHTML = `<option value="${esc(S.aiModel)}">${esc(S.aiModel)}</option>`;
+      syncAiMode();
+    }
+    if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
+
     fillSelects();
   }
 
@@ -177,6 +209,7 @@
         d.setAttribute('open', '');
       }
       const ex = extractPrompt(text || lastMessageText());
+      CURTEXT = text || lastMessageText() || '';
       if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
       fillSelects();
       loadMeta();
@@ -412,6 +445,109 @@
     const st = $('#h3v-injectState');
     if (st) st.textContent = ok ? (on ? '已注入：每次回复都要求六段' : '注入已关') : ('注入失败：' + why);
     if (verbose) status(ok ? 'ok' : 'err', ok ? (on ? '已把「输出六段」注入提示词' : '已关闭注入') : '注入失败：' + why);
+  }
+
+  /* ---------- AI 按正文生成六段 ---------- */
+  let CURTEXT = '';
+
+  const SIX_SYS = `你是 MiniMax H3 视频提示词作者。用户给你一段角色扮演/小说正文，你要把它改写成一条 15 秒视频的提示词。
+只输出六段，用 [[H3]] 开头、[[/H3]] 结尾，段名照抄且顺序固定：subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music。
+硬规则：
+1) 内容必须来自正文：真实出现的人物、地点、动作、台词、时间段。不要编造正文里没有的人或场景。
+2) 不要照抄任何格式说明或占位符（如“角色A：脸型…”）；每一句都要是具体描述。
+3) 除台词外全部英文；台词原样用 <d>[Chinese] 台词</d>。正文没有台词就不要写台词。
+4) 人物按出场顺序写成 <Subject 1>、<Subject 2>…，在 subject_definitions 里描述脸型/发色/瞳色/服装/体态；场景单独一个 <Subject>。用户会给每个角色一张四视图、场景图最后一张，所以用 <Picture 1..N> 对应说明。
+5) 三处画风锁必须写：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
+6) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
+7) 画面里只出现正文里的角色，其余座位与背景空无一人。
+8) detailed_description 逐镜头：第 1 镜不写时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；说话人必须在画面里，台词写清第几秒开口、第几秒说完。
+9) 六段以外不要任何解释。`;
+
+  function sixUser(text) {
+    return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
+  }
+
+  async function stGenerate(sys, user) {
+    const ctx = window.SillyTavern.getContext();
+    if (!ctx) throw new Error('拿不到 SillyTavern 上下文');
+    const quietPrompt = sys + '\n\n' + user;
+    try {
+      if (typeof ctx.generateQuietPrompt === 'function') {
+        const r = await ctx.generateQuietPrompt({ quietPrompt: quietPrompt, quietName: 'h3v-six', responseLength: 1200 });
+        if (r) return String(r);
+      }
+    } catch (e) { LOG('generateQuietPrompt fail', e); }
+    try {
+      if (typeof ctx.generateRaw === 'function') {
+        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1200 });
+        if (r) return String(r);
+      }
+    } catch (e) { LOG('generateRaw fail', e); }
+    throw new Error('这个酒馆版本不允许扩展直接调生成（需要 generateQuietPrompt / generateRaw），改用「自定义 API」');
+  }
+
+  async function apiGenerate(sys, user) {
+    const base = (S.aiBase || '').trim().replace(/\/+$/, '');
+    const key = (S.aiKey || '').trim();
+    const model = (S.aiModel || '').trim();
+    if (!base) throw new Error('先填自定义 API 地址');
+    if (!model) throw new Error('先点「拉取模型」选一个');
+    const url = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
+    const r = await withTimeout(fetch(url, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
+      body: JSON.stringify({ model: model, temperature: 0.6, stream: false, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }),
+    }), 90000, 'AI 请求 ');
+    const t = await r.text();
+    let j = null; try { j = JSON.parse(t); } catch (_) {}
+    if (!j) throw new Error('返回不是 JSON：' + t.slice(0, 140));
+    if (j.error) throw new Error(j.error.message || JSON.stringify(j.error).slice(0, 140));
+    const ch = j.choices && j.choices[0];
+    const txt = ch && ch.message ? ch.message.content : (ch ? ch.text : '');
+    if (!txt) throw new Error('AI 没返回内容');
+    return String(txt);
+  }
+
+  async function genSix() {
+    const text = (CURTEXT || lastMessageText() || '').trim();
+    if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
+    const btn = $('#h3v-gen');
+    btn.disabled = true;
+    const t0 = Date.now();
+    status('run', S.aiMode === 'st' ? '用酒馆当前连接/预设生成中…' : '调用自定义 API 生成中…');
+    try {
+      const out = (S.aiMode === 'st') ? await stGenerate(SIX_SYS, sixUser(text)) : await apiGenerate(SIX_SYS, sixUser(text));
+      $('#h3v-prompt').value = extractPrompt(out) || out;
+      status('ok', '六段已生成（' + (S.aiMode === 'st' ? '酒馆预设' : S.aiModel) + ' · ' + Math.round((Date.now() - t0) / 1000) + ' 秒）');
+    } catch (e) {
+      status('err', '生成失败：' + (e && e.message ? e.message : e));
+    }
+    btn.disabled = false;
+  }
+
+  async function fetchModels() {
+    const base = ($('#h3v-aiBase').value || '').trim().replace(/\/+$/, '');
+    const key = ($('#h3v-aiKey').value || '').trim();
+    if (!base) { status('err', '先填 API 地址'); return; }
+    status('run', '拉取模型列表…');
+    try {
+      const url = base.endsWith('/models') ? base : base + '/models';
+      const r = await withTimeout(fetch(url, { headers: key ? { Authorization: 'Bearer ' + key } : {} }), 15000, '拉模型 ');
+      const j = await r.json();
+      const arr = (j.data || j.models || []).map(x => (typeof x === 'string' ? x : (x.id || x.name))).filter(Boolean).sort();
+      if (!arr.length) throw new Error('接口没返回模型');
+      $('#h3v-aiModel').innerHTML = arr.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+      S.aiModel = arr.includes(S.aiModel) ? S.aiModel : arr[0];
+      $('#h3v-aiModel').value = S.aiModel;
+      saveS();
+      status('ok', '拉到 ' + arr.length + ' 个模型，已选 ' + S.aiModel);
+    } catch (e) { status('err', '拉模型失败：' + e.message); }
+  }
+
+  function syncAiMode() {
+    const box = $('#h3v-apiBox');
+    if (!box) return;
+    box.style.display = (S.aiMode === 'api') ? 'block' : 'none';
   }
 
   /* ---------- 楼层按钮 ---------- */
