@@ -982,6 +982,15 @@
     return '';
   }
 
+  function blockTail(b) {
+    const m = String(b || '').match(/detailed_description\s*:?\s*([\s\S]*?)(?:\n\s*overall_soundscape\s*:?|$)/i);
+    const dd = (m ? m[1] : String(b || '')).trim();
+    const shots = dd.split(/\n(?=\[Shot\s)/);
+    let last = shots[shots.length - 1] || dd;
+    last = last.replace(/\s+/g, ' ').trim();
+    return last.slice(-320);
+  }
+
   async function genSix() {
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
@@ -1000,21 +1009,24 @@
 
       const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
       const blocks = [];
+      let lastBlock = '';
       for (let i = 0; i < plan.segs.length; i++) {
         const seg = plan.segs[i];
         const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
+        const prevTail = lastBlock ? blockTail(lastBlock) : '';
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
           + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
-          + '<Subject N> 编号沿用全片编号；只拍这一段的事。';
+          + '<Subject N> 编号沿用全片编号；只拍这一段的事。'
+          + (prevTail ? '\n\n上一段结尾状态（本段必须从这个画面/动作接上；不要重拍上一段已经发生的事，也不要重复它的台词）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
         let out = '';
         try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
-        if (b) blocks.push(normalizeBlock(b));
+        if (b) { const nb = normalizeBlock(b); blocks.push(nb); lastBlock = nb; }
         await new Promise(r => setTimeout(r, 200));
       }
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
