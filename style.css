@@ -59,3 +59,10 @@
   opacity: .85; font-size: 16px; user-select: none; padding: 4px 6px;
 }
 .h3v-msgbtn:active, .h3v-msgbtn:hover { opacity: 1; }
+
+/* 图片预览 */
+#h3v-dlg .pv {
+  display: none; width: 100%; max-height: 150px; object-fit: contain;
+  background: #000; border: 1px solid #26303c; border-radius: 8px;
+  margin: 0 0 10px 0;
+}

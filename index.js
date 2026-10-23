@@ -78,6 +78,13 @@
           <select id="h3v-scene" style="flex:1"></select>
           <button id="h3v-sceneUp">传</button>
         </div>
+        <img id="h3v-scenePv" class="pv" alt="">
+
+        <div class="row">
+          <label style="min-width:auto"><input type="checkbox" id="h3v-inject" checked> 自动要求模型输出六段</label>
+          <button id="h3v-injectBtn">立即注入</button>
+          <span class="hint" id="h3v-injectState"></span>
+        </div>
 
         <div class="row">
           <label>时长(秒)</label><input type="text" id="h3v-sec" value="${esc(S.seconds)}" style="max-width:64px;flex:none">
@@ -115,6 +122,11 @@
       row.className = 'row';
       row.innerHTML = `<label>角色${i + 1}</label><select data-v="${i}" style="flex:1"></select><button data-up="${i}" style="flex:none">传</button>`;
       wrap.appendChild(row);
+      const pv = document.createElement('img');
+      pv.className = 'pv';
+      pv.dataset.pv = String(i);
+      pv.alt = '';
+      wrap.appendChild(pv);
     }
 
     $('#h3v-x').onclick = closePanel;
@@ -138,7 +150,16 @@
     wrap.querySelectorAll('select[data-v]').forEach(sel => { sel.onchange = () => { S.views[Number(sel.dataset.v)] = sel.value; saveS(); }; });
     wrap.querySelectorAll('button[data-up]').forEach(btn => { btn.onclick = () => pickAndUpload(Number(btn.dataset.up)); });
     $('#h3v-sceneUp').onclick = () => pickAndUpload(-1);
-    $('#h3v-scene').onchange = () => { S.scene = $('#h3v-scene').value; saveS(); };
+    $('#h3v-scene').onchange = () => { S.scene = $('#h3v-scene').value; saveS(); updatePreviews(); };
+    wrap.querySelectorAll('select[data-v]').forEach(sel => {
+      sel.addEventListener('change', updatePreviews);
+    });
+
+    if ($('#h3v-inject')) {
+      $('#h3v-inject').checked = S.inject !== false;
+      $('#h3v-inject').onchange = () => { S.inject = $('#h3v-inject').checked; saveS(); applyInjection(true); };
+    }
+    if ($('#h3v-injectBtn')) $('#h3v-injectBtn').onclick = () => applyInjection(true);
 
     fillSelects();
   }
@@ -186,6 +207,27 @@
     sc.innerHTML = opts;
     sc.value = S.scene || '';
     if ($('#h3v-mp')) $('#h3v-mp').value = S.mp;
+    updatePreviews();
+  }
+
+  function previewUrl(name) {
+    return api('/api/preview?type=input&filename=' + encodeURIComponent(name) + '&t=' + Date.now());
+  }
+
+  function updatePreviews() {
+    for (let i = 0; i < 6; i++) {
+      const sel = document.querySelector(`#h3v-views select[data-v="${i}"]`);
+      const img = document.querySelector(`#h3v-views img[data-pv="${i}"]`);
+      if (!img) continue;
+      const v = sel ? sel.value : '';
+      if (v) { img.src = previewUrl(v); img.style.display = 'block'; }
+      else { img.removeAttribute('src'); img.style.display = 'none'; }
+    }
+    const sc = $('#h3v-scene'), si = $('#h3v-scenePv');
+    if (si) {
+      if (sc && sc.value) { si.src = previewUrl(sc.value); si.style.display = 'block'; }
+      else { si.removeAttribute('src'); si.style.display = 'none'; }
+    }
   }
 
   /* ---------- 与 H3工作台 通信 ---------- */
@@ -260,6 +302,12 @@
         if (j.error) throw new Error(j.error);
         if (slot >= 0) S.views[slot] = j.name; else S.scene = j.name;
         saveS();
+        try {
+          const img = slot >= 0
+            ? document.querySelector(`#h3v-views img[data-pv="${slot}"]`)
+            : $('#h3v-scenePv');
+          if (img) { img.src = URL.createObjectURL(f); img.style.display = 'block'; }
+        } catch (_) {}
         await loadMeta();
         status('ok', '已上传：' + j.name);
       } catch (e) { status('err', '上传失败：' + e.message); }
@@ -336,6 +384,33 @@
         .then(() => status('ok', '模板已复制，粘到角色卡/世界书/作者注释'))
         .catch(() => status('err', '复制失败，手动选吧'));
     } else status('err', '这个浏览器不支持自动复制');
+  }
+
+  const INJECT = `[H3 视频任务] 每次回复正文写完后，必须再输出一个 [[H3]] … [[/H3]] 块，六段（段名照抄、顺序固定）：subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。不要解释、不要代码围栏。
+规则：
+1) <Picture 1..N> 对应用户给的角色四视图与场景图（场景图是最后一张），逐个声明为身份锚（脸/发/瞳/服装/体型）。
+2) 全文英文，只有台词用 <d>[Chinese] 台词</d>。
+3) 三处画风锁必须保留：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
+4) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
+5) 画面里只出现剧情角色，其余座位与背景空无一人。
+6) detailed_description 逐镜头写：第 1 镜不带时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；台词写清第几秒开口、第几秒说完，说话人必须在画面里。
+7) 六段之外不要任何解释文字。`;
+
+  function applyInjection(verbose) {
+    const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
+    let ok = false, why = '';
+    try {
+      const ctx = window.SillyTavern.getContext();
+      if (ctx && typeof ctx.setExtensionPrompt === 'function') {
+        const types = ctx.extension_prompt_types || {};
+        const pos = (types.IN_CHAT != null) ? types.IN_CHAT : 1;
+        ctx.setExtensionPrompt('h3v_six', on ? INJECT : '', pos, 0, false, 0);
+        ok = true;
+      } else why = '这个酒馆版本没有 setExtensionPrompt（升级酒馆，或把模板手动粘进角色卡/世界书）';
+    } catch (e) { why = e.message; }
+    const st = $('#h3v-injectState');
+    if (st) st.textContent = ok ? (on ? '已注入：每次回复都要求六段' : '注入已关') : ('注入失败：' + why);
+    if (verbose) status(ok ? 'ok' : 'err', ok ? (on ? '已把「输出六段」注入提示词' : '已关闭注入') : '注入失败：' + why);
   }
 
   /* ---------- 楼层按钮 ---------- */
@@ -421,8 +496,9 @@ N/A
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
       if (ctx && ctx.eventSource && ctx.eventTypes) {
         ctx.eventSource.on(ctx.eventTypes.MESSAGE_RENDERED, () => setTimeout(attachMessageButtons, 120));
-        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => setTimeout(attachMessageButtons, 300));
+        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => { setTimeout(attachMessageButtons, 300); setTimeout(() => applyInjection(false), 400); });
       }
+      applyInjection(false);
       const chat = document.getElementById('chat');
       if (chat && window.MutationObserver) {
         new MutationObserver(() => { clearTimeout(boot._t); boot._t = setTimeout(attachMessageButtons, 250); })
