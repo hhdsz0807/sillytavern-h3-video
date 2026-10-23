@@ -1,5 +1,5 @@
-/* H3 视频工坊 —— SillyTavern 扩展（弹窗版）
- * 把楼层里的「六段提示词」+ 角色四视图/场景图，丢给同一台手机上的 H3工作台（127.0.0.1:8899）出片。
+/* H3 视频工坊 —— SillyTavern 扩展（<dialog> 顶层弹窗，绝不会被正文盖住）
+ * 楼层里的「六段提示词」+ 角色四视图/场景图 → 手机上的 H3工作台（127.0.0.1:8899）出片。
  * 不在这里配任何云端 Key。
  */
 (function () {
@@ -7,22 +7,16 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = {
-    host: 'http://127.0.0.1:8899',
-    seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: true,
-    views: ['', '', '', '', '', ''],
-    scene: '',
-  };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: true, views: ['', '', '', '', '', ''], scene: '' };
 
-  let S = {};
-  let META = { images: [] };
-  let POLL = null;
-  let UI = false;
-
+  let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
   catch (_) { S = Object.assign({}, DEFA); }
   if (!Array.isArray(S.views)) S.views = ['', '', '', '', '', ''];
   while (S.views.length < 6) S.views.push('');
+
+  let META = { images: [] };
+  let POLL = null;
 
   const saveS = () => { try { localStorage.setItem(LSKEY, JSON.stringify(S)); } catch (_) {} };
   const $ = (s, r) => (r || document).querySelector(s);
@@ -41,43 +35,42 @@
   }
 
   /* ---------- UI ---------- */
+  const INLINE = 'position:fixed;inset:0;margin:0;padding:0;border:0;width:100%;height:100%;' +
+    'max-width:none;max-height:none;background:#121820;color:#dfe7f0;z-index:2147483000;' +
+    'flex-direction:column;overflow:hidden;display:none;';
+
   function ensureUI() {
-    if (UI && $('#h3v-panel')) return;
-    UI = true;
+    if ($('#h3v-dlg')) return;
 
     if (!$('#h3v-fab')) {
       const fab = document.createElement('button');
       fab.id = 'h3v-fab';
       fab.title = 'H3 视频工坊';
       fab.textContent = '🎬';
+      fab.style.cssText = 'position:fixed;right:14px;bottom:96px;z-index:2147482000;width:46px;height:46px;' +
+        'border-radius:50%;background:#2f81f7;color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.35);';
       fab.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPanel(lastMessageText()); });
       document.body.appendChild(fab);
     }
-    if ($('#h3v-panel')) return;
 
-    const mask = document.createElement('div');
-    mask.id = 'h3v-mask';
-    mask.addEventListener('click', closePanel);
-    document.body.appendChild(mask);
-
-    const p = document.createElement('div');
-    p.id = 'h3v-panel';
-    p.innerHTML = `
-      <div class="bar">
-        <b>🎬 H3 视频工坊</b>
-        <span class="hint">→ 手机 H3工作台</span>
-        <span class="sp"></span>
-        <button class="close" id="h3v-x">关闭 ✕</button>
+    const dlg = document.createElement('dialog');
+    dlg.id = 'h3v-dlg';
+    dlg.style.cssText = INLINE;
+    dlg.innerHTML = `
+      <div class="bar" style="flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0e141b;border-bottom:1px solid #26303c;">
+        <b style="font-size:15px">🎬 H3 视频工坊</b>
+        <span class="hint" style="color:#7d8b9b;font-size:12px">→ 手机 H3工作台</span>
+        <span class="sp" style="flex:1"></span>
+        <button id="h3v-x" class="close">关闭 ✕</button>
       </div>
 
-      <div class="body">
-        <div class="row">
-          <label>H3 地址</label>
+      <div class="body" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px 30px;">
+        <div class="row"><label>H3 地址</label>
           <input type="text" id="h3v-host" value="${esc(S.host)}" placeholder="http://127.0.0.1:8899">
           <button id="h3v-ping">测试连接</button>
         </div>
 
-        <div class="row"><label>四视图</label><span class="hint">顺序 = &lt;Picture 1..N&gt;；角色几号放几号</span></div>
+        <div class="row"><label>四视图</label><span class="hint">顺序 = &lt;Picture 1..N&gt;</span></div>
         <div id="h3v-views"></div>
 
         <div class="row"><label>场景图</label>
@@ -107,20 +100,16 @@
         <div id="h3v-status"></div>
         <div id="h3v-out"></div>
 
-        <div class="row" style="margin-top:14px">
-          <button class="close" id="h3v-x2" style="flex:1">关闭面板</button>
-        </div>
+        <div class="row" style="margin-top:14px"><button class="close" id="h3v-x2" style="flex:1">关闭面板</button></div>
       </div>
     `;
-    document.body.appendChild(p);
+    document.body.appendChild(dlg);
 
     const wrap = $('#h3v-views');
     for (let i = 0; i < 6; i++) {
       const row = document.createElement('div');
       row.className = 'row';
-      row.innerHTML = `<label>角色${i + 1}</label>
-        <select data-v="${i}" style="flex:1"></select>
-        <button data-up="${i}" style="flex:none">传</button>`;
+      row.innerHTML = `<label>角色${i + 1}</label><select data-v="${i}" style="flex:1"></select><button data-up="${i}" style="flex:none">传</button>`;
       wrap.appendChild(row);
     }
 
@@ -134,13 +123,11 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    dlg.addEventListener('close', () => { dlg.style.display = 'none'; });
+    dlg.addEventListener('cancel', () => { dlg.style.display = 'none'; });
 
-    wrap.querySelectorAll('select[data-v]').forEach(sel => {
-      sel.onchange = () => { S.views[Number(sel.dataset.v)] = sel.value; saveS(); };
-    });
-    wrap.querySelectorAll('button[data-up]').forEach(btn => {
-      btn.onclick = () => pickAndUpload(Number(btn.dataset.up));
-    });
+    wrap.querySelectorAll('select[data-v]').forEach(sel => { sel.onchange = () => { S.views[Number(sel.dataset.v)] = sel.value; saveS(); }; });
+    wrap.querySelectorAll('button[data-up]').forEach(btn => { btn.onclick = () => pickAndUpload(Number(btn.dataset.up)); });
     $('#h3v-sceneUp').onclick = () => pickAndUpload(-1);
     $('#h3v-scene').onchange = () => { S.scene = $('#h3v-scene').value; saveS(); };
 
@@ -150,25 +137,32 @@
   function openPanel(text) {
     try {
       ensureUI();
-      const p = $('#h3v-panel'), m = $('#h3v-mask');
-      if (!p) { alert('面板没建出来（脚本异常），看浏览器控制台 [h3v] 报错'); return; }
-      m.classList.add('on');
-      p.classList.add('on');
+      const d = $('#h3v-dlg');
+      if (!d) { alert('面板没建出来（脚本异常）'); return; }
+      d.style.display = 'flex';
+      // 顶层（top-layer）：不会被酒馆任何容器/层级盖住
+      if (typeof d.showModal === 'function') {
+        try { if (!d.open) d.showModal(); } catch (_) { d.setAttribute('open', ''); }
+      } else {
+        d.setAttribute('open', '');
+      }
       const ex = extractPrompt(text || lastMessageText());
       if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
       fillSelects();
       loadMeta();
-      LOG('panel opened', ex ? 'with prompt' : 'no prompt');
+      LOG('opened', !!ex);
     } catch (e) {
-      LOG('openPanel error', e);
-      alert('打开面板失败：' + (e && e.message ? e.message : e));
+      LOG('open error', e);
+      alert('打开失败：' + (e && e.message ? e.message : e));
     }
   }
 
   function closePanel() {
-    const p = $('#h3v-panel'), m = $('#h3v-mask');
-    if (p) p.classList.remove('on');
-    if (m) m.classList.remove('on');
+    const d = $('#h3v-dlg');
+    if (!d) return;
+    try { if (d.open && typeof d.close === 'function') d.close(); } catch (_) {}
+    d.removeAttribute('open');
+    d.style.display = 'none';
   }
 
   function fillSelects() {
@@ -182,7 +176,7 @@
     const sc = $('#h3v-scene');
     sc.innerHTML = opts;
     sc.value = S.scene || '';
-    $('#h3v-mp').value = S.mp;
+    if ($('#h3v-mp')) $('#h3v-mp').value = S.mp;
   }
 
   /* ---------- 与 H3工作台 通信 ---------- */
@@ -196,9 +190,7 @@
     return j;
   }
   async function jpost(path, body) {
-    const r = await fetch(api(path), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
-    });
+    const r = await fetch(api(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
     const t = await r.text();
     let j = {}; try { j = JSON.parse(t); } catch (_) { throw new Error('返回不是 JSON：' + t.slice(0, 120)); }
     if (j.error) throw new Error(j.error);
@@ -246,8 +238,7 @@
       const sel = document.querySelector(`#h3v-views select[data-v="${i}"]`);
       if (sel && sel.value) images.push(sel.value);
     }
-    const scene = $('#h3v-scene').value;
-    if (scene) images.push(scene);
+    if ($('#h3v-scene').value) images.push($('#h3v-scene').value);
     if (!images.length) { status('err', '至少放一张图（四视图或场景图）'); return; }
 
     const btn = $('#h3v-run');
@@ -310,7 +301,7 @@
     } else status('err', '这个浏览器不支持自动复制');
   }
 
-  /* ---------- 楼层按钮（事件委托，防重绘丢 handler） ---------- */
+  /* ---------- 楼层按钮 ---------- */
   function lastMessageText() {
     const list = document.querySelectorAll('#chat .mes');
     if (!list.length) return '';
@@ -318,16 +309,13 @@
     const t = last.querySelector('.mes_text');
     return t ? (t.innerText || t.textContent || '') : (last.innerText || '');
   }
-
   function messageTextOf(el) {
     const mes = el.closest ? el.closest('.mes') : null;
     if (!mes) return '';
     const t = mes.querySelector('.mes_text');
     return t ? (t.innerText || t.textContent || '') : (mes.innerText || '');
   }
-
   function attachMessageButtons() {
-    let n = 0;
     document.querySelectorAll('#chat .mes').forEach(mes => {
       if (mes.querySelector('.h3v-msgbtn')) return;
       const textEl = mes.querySelector('.mes_text');
@@ -337,12 +325,10 @@
       btn.dataset.h3v = '1';
       btn.title = '这条出视频';
       btn.textContent = '🎬';
-      try { textEl.insertAdjacentElement('afterend', btn); n++; } catch (_) {}
+      try { textEl.insertAdjacentElement('afterend', btn); } catch (_) {}
     });
-    if (n) LOG('buttons added:', n);
   }
 
-  // 全局委托：即使楼层被 ST 重绘，点击照样生效
   document.addEventListener('click', function (e) {
     const t = e.target;
     if (!t || !t.closest) return;
@@ -350,9 +336,40 @@
     if (!b) return;
     e.preventDefault();
     e.stopPropagation();
-    const text = messageTextOf(b) || lastMessageText();
-    openPanel(text);
+    openPanel(messageTextOf(b) || lastMessageText());
   }, true);
+
+  const TEMPLATE = `【给角色卡 / 世界书 / 作者注释用】
+每次回复正文写完后，另起一行输出下面这个块，不要解释、不要代码围栏：
+
+[[H3]]
+subject_definitions:
+<Picture 1> is the identity anchor for <Subject 1>: …（角色A：脸型/发色/瞳色/服装）
+<Picture 2> is the identity anchor for <Subject 2>: …（角色B）
+<Picture N> is <Subject M>: …（场景图，放最后一张）
+<Subject 1> is drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.
+<Subject 2> is painted in the same flat 2D anime style as <Subject 1>.
+Each reference sheet is an identity reference only: each character appears exactly once; never reproduce a character sheet, panels, borders or labels; no letters, subtitles or watermarks.
+
+summary:
+[reference generation] 一句话说清这场戏，并强调画面里只有指定角色（其余座位/背景空无一人）。
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1] … [Shot N]): fully_preserved - 保留脸/发/眼/服装
+<Subject 2> (…): fully_preserved - …
+<Subject N> (…): fully_preserved - 保留场景陈设与光线
+
+detailed_description:
+平涂 2D 动画，16:9，光线说明，镜头稳。
+[Shot 1] 景别/机位/动作/表情。说话人：<Subject 1> 说 <d>[Chinese] 台词原文</d>，第一句 0.4 秒开口、3.0 秒说完。
+[Shot 2] At 00:05.500 …（第 2 镜起必须带时间戳）
+[Shot 3] At 00:10.000 …
+
+overall_soundscape:
+环境底噪 + 与动作同步的拟音（杯冰、椅子、脚步），台词近麦。
+non_diegetic_music:
+N/A
+[[/H3]]`;
 
   /* ---------- 启动 ---------- */
   function boot() {
@@ -371,9 +388,7 @@
       }
       LOG('booted');
       loadMeta();
-    } catch (e) {
-      LOG('boot error', e);
-    }
+    } catch (e) { LOG('boot error', e); }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

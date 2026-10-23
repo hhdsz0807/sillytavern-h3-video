@@ -1,53 +1,43 @@
-/* H3 视频工坊 —— 酒馆扩展样式（满屏面板版，手机上一定能滚能关） */
-#h3v-mask {
-  position: fixed; inset: 0; z-index: 99998;
-  background: rgba(0,0,0,.6); display: none;
+/* H3 视频工坊 —— 酒馆扩展样式（<dialog> 顶层弹窗） */
+#h3v-dlg {
+  position: fixed; inset: 0; margin: 0; padding: 0; border: 0;
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  background: #121820; color: #dfe7f0; z-index: 2147483000;
+  flex-direction: column; font-size: 13px; overflow: hidden;
 }
-#h3v-mask.on { display: block; }
+#h3v-dlg[open] { display: flex; }
+#h3v-dlg::backdrop { background: rgba(0,0,0,.65); }
 
-#h3v-panel {
-  position: fixed; inset: 0; z-index: 99999;
-  background: #121820; color: #dfe7f0;
-  display: none; flex-direction: column; font-size: 13px;
-}
-#h3v-panel.on { display: flex; }
-
-#h3v-panel .bar {
+#h3v-dlg .bar {
   flex: none; display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px));
   background: #0e141b; border-bottom: 1px solid #26303c;
-  position: sticky; top: 0; z-index: 2;
 }
-#h3v-panel .bar b { font-size: 15px; }
-#h3v-panel .bar .sp { flex: 1; }
-#h3v-panel .bar button {
-  background: #1c222c; color: #dfe7f0; border: 1px solid #2a3240;
-  border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
-}
-#h3v-panel .bar button.close { background: #3a1f22; border-color: #6b2b2d; color: #ffb3ad; font-weight: 600; }
+#h3v-dlg .bar b { font-size: 15px; }
+#h3v-dlg .bar .sp { flex: 1; }
+#h3v-dlg .bar .hint { color: #7d8b9b; font-size: 12px; }
 
-#h3v-panel .body {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
+#h3v-dlg .body {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
-  padding: 12px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 14px calc(28px + env(safe-area-inset-bottom, 0px));
 }
 
-#h3v-panel .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-#h3v-panel label { min-width: 68px; color: #8b98ab; font-size: 12px; }
-#h3v-panel input[type=text], #h3v-panel select, #h3v-panel textarea {
+#h3v-dlg .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+#h3v-dlg label { min-width: 68px; color: #8b98ab; font-size: 12px; }
+#h3v-dlg input[type=text], #h3v-dlg select, #h3v-dlg textarea {
   background: #1c222c; color: #e6ebf2; border: 1px solid #2a3240;
   border-radius: 6px; padding: 8px 9px; font: inherit; flex: 1; min-width: 90px;
 }
-#h3v-panel textarea { width: 100%; min-height: 140px; font-size: 12px; line-height: 1.5; }
-#h3v-panel .body > button, #h3v-panel .row button {
+#h3v-dlg textarea { width: 100%; min-height: 140px; font-size: 12px; line-height: 1.5; }
+#h3v-dlg button {
   background: #1c222c; color: #dfe7f0; border: 1px solid #2a3240;
   border-radius: 8px; padding: 9px 14px; font: inherit; cursor: pointer;
 }
-#h3v-panel .row button.primary, #h3v-panel button.primary {
-  background: #2f81f7; border-color: #2f81f7; color: #fff; font-weight: 600;
-}
-#h3v-panel button:disabled { opacity: .5; }
-#h3v-panel .hint { color: #7d8b9b; font-size: 12px; }
+#h3v-dlg button.primary { background: #2f81f7; border-color: #2f81f7; color: #fff; font-weight: 600; }
+#h3v-dlg button.close { background: #3a1f22; border-color: #6b2b2d; color: #ffb3ad; font-weight: 600; }
+#h3v-dlg button:disabled { opacity: .5; }
+#h3v-dlg .hint { color: #7d8b9b; font-size: 12px; }
 #h3v-status { background: #1c222c; border-radius: 8px; padding: 9px; margin-top: 8px; white-space: pre-wrap; font-size: 12px; display: none; word-break: break-word; }
 #h3v-status.on { display: block; }
 #h3v-status.err { border-left: 3px solid #f85149; }
@@ -57,7 +47,7 @@
 #h3v-out a { color: #2f81f7; font-size: 12px; }
 
 #h3v-fab {
-  position: fixed; right: 14px; bottom: 96px; z-index: 99997;
+  position: fixed; right: 14px; bottom: 96px; z-index: 2147482000;
   width: 46px; height: 46px; border-radius: 50%;
   background: #2f81f7; color: #fff; border: none;
   font-size: 20px; line-height: 46px; text-align: center;
