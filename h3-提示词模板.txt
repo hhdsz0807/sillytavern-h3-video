@@ -1,0 +1,45 @@
+【H3 视频工坊 · 给模型的提示词模板】
+把下面这段放进角色卡描述 / 世界书 / 作者注释（任意一处常驻即可）。
+要求模型：正文写完后，另起一行输出 [[H3]] … [[/H3]] 块，只放六段，不要解释、不要代码围栏。
+
+================ 模板开始 ================
+每次回复正文写完后，另起一行输出下面这个块（六段，段名照抄、顺序固定）：
+
+[[H3]]
+subject_definitions:
+<Picture 1> is the identity anchor for <Subject 1>: fixes face shape, hair color, eye color, clothing.
+<Picture 2> is the identity anchor for <Subject 2>: fixes face shape, hair color, eye color, clothing.
+<Picture 3> is <Subject 3>: the location, including furniture, props, lighting and time of day.
+<Subject 1> is drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.
+<Subject 2> is painted in the same flat 2D anime style as <Subject 1>.
+<Subject 3> is, in the same flat 2D anime style, the interior described above.
+The reference sheets are identity references only: each character appears exactly once; never reproduce a character sheet, panels, borders, gutters or the sheet labels; no letters, subtitles or watermarks anywhere.
+
+summary:
+[reference generation] 一句话说清这场戏做什么；并写明画面里只有这三个角色，其余座位、过道、背景完全空无一人。
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1] through [Shot N]): fully_preserved - retain face, hair, eye color, clothing.
+<Subject 2> (appears in [Shot 1] through [Shot N]): fully_preserved - retain face, hair, eye color, clothing.
+<Subject 3> (appears in [Shot 1] through [Shot N]): fully_preserved - retain furniture, props, lighting.
+<Audio 1>（如果有音色参考）: reference - retain vocal identity and timbre.
+
+detailed_description:
+Flat 2D anime cel animation, 16:9, 光线说明，镜头稳。
+[Shot 1] 景别 + 机位 + 动作 + 表情。<Subject 1> says, with the line starting at 00:00.400: <d>[Chinese] 台词原文</d>
+[Shot 2] At 00:05.500 …（第 2 镜起必须带时间戳，且每镜写清说话人）
+[Shot 3] At 00:10.000 …
+
+overall_soundscape:
+环境底噪 + 与动作同步的拟音（冰块、椅子、脚步）；台词近麦、与口型同步。
+non_diegetic_music:
+N/A
+[[/H3]]
+================ 模板结束 ================
+
+硬规则提醒（写进模板也别丢）：
+1. 全文英文，只有台词用 <d>[Chinese] …</d>。
+2. 参考图是四视图设定图 → 必须写「不许复刻分格/文字」那两句。
+3. 只允许出现剧情里的角色；背景不许有路人/店员/顾客。
+4. 第 2 镜起带 `At MM:SS.mmm`，台词写清第几秒开口、第几秒说完。
+5. 六段之外不要任何解释文字。
