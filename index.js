@@ -386,15 +386,16 @@
     } else status('err', '这个浏览器不支持自动复制');
   }
 
-  const INJECT = `[H3 视频任务] 每次回复正文写完后，必须再输出一个 [[H3]] … [[/H3]] 块，六段（段名照抄、顺序固定）：subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。不要解释、不要代码围栏。
-规则：
-1) <Picture 1..N> 对应用户给的角色四视图与场景图（场景图是最后一张），逐个声明为身份锚（脸/发/瞳/服装/体型）。
-2) 全文英文，只有台词用 <d>[Chinese] 台词</d>。
-3) 三处画风锁必须保留：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
-4) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
-5) 画面里只出现剧情角色，其余座位与背景空无一人。
-6) detailed_description 逐镜头写：第 1 镜不带时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；台词写清第几秒开口、第几秒说完，说话人必须在画面里。
-7) 六段之外不要任何解释文字。`;
+  const INJECT = `[H3 视频任务] 这次回复在正文之后，必须再写一个视频提示词块，供 MiniMax H3 把这段正文变成 15 秒视频。硬性要求：
+1) 用 [[H3]] 开头、[[/H3]] 结尾，中间只有六段，段名照抄且顺序固定：subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music。
+2) 内容必须**从你刚才这段正文里提取**：真实出现的角色、地点、动作、台词、时间。不要照抄格式说明、不要留占位符、不要写正文里没出现的人。
+3) 除台词外全部英文；台词原样用 <d>[Chinese] 台词</d> 包起来。正文里没有台词就不写台词。
+4) 角色按出场顺序写成 <Subject 1>、<Subject 2>…，在 subject_definitions 里逐个描述脸型/发色/瞳色/服装；场景单独写一个 <Subject>。用户会按这个顺序给角色四视图和场景图（场景图是最后一张），所以用 <Picture 1..N> 对应说明。
+5) 三处画风锁必须写：<Subject 1> 结尾写 drawn in pure flat 2D Japanese anime cel style: clean ink lineart, flat color fills with simple two-tone shading, big expressive anime eyes and a small mouth; no 3D rendering, no CGI shading, no realistic skin texture anywhere.；其它角色开头写 painted in the same flat 2D anime style as <Subject 1>；场景开头写 is, in the same flat 2D anime style,。
+6) 参考图是四视图设定图：写明每张只作身份参考、每个角色只出现一次、不许复刻分格/边框/标签/文字、画内不得出现任何字母水印。
+7) 画面里只出现正文里的角色，其余座位与背景空无一人。
+8) detailed_description 逐镜头：第 1 镜不写时间戳，第 2 镜起写 At MM:SS.mmm；每镜写清景别/机位/动作/表情；有台词就写清第几秒开口、第几秒说完，说话人必须在画面里。
+9) 六段之外不要任何解释文字，也不要再重复正文。`;
 
   function applyInjection(verbose) {
     const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
@@ -424,6 +425,15 @@
   function messageTextOf(el) {
     const mes = el.closest ? el.closest('.mes') : null;
     if (!mes) return '';
+    // 优先读原始消息（正则折叠后 DOM 里可能已经没有 [[H3]] 标记）
+    try {
+      const ctx = window.SillyTavern.getContext();
+      const id = mes.getAttribute('mesid') != null ? mes.getAttribute('mesid') : mes.dataset.mesid;
+      if (ctx && ctx.chat && id != null && ctx.chat[Number(id)]) {
+        const raw = ctx.chat[Number(id)].mes;
+        if (raw) return raw;
+      }
+    } catch (_) {}
     const t = mes.querySelector('.mes_text');
     return t ? (t.innerText || t.textContent || '') : (mes.innerText || '');
   }

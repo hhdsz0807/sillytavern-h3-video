@@ -1,0 +1,32 @@
+[
+  {
+    "id": "h3v-fold-0001",
+    "scriptName": "H3 六段折叠（显示用）",
+    "findRegex": "/\\[\\[H3\\]\\]([\\s\\S]*?)\\[\\[\\/H3\\]\\]/g",
+    "replaceString": "<details><summary>🎬 H3 六段提示词（点开看）</summary>\n\n$1\n\n</details>",
+    "trimStrings": [],
+    "placement": [2],
+    "disabled": false,
+    "markdownOnly": true,
+    "promptOnly": false,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  },
+  {
+    "id": "h3v-strip-0002",
+    "scriptName": "H3 六段不发给模型（可选，默认关）",
+    "findRegex": "/\\[\\[H3\\]\\][\\s\\S]*?\\[\\[\\/H3\\]\\]/g",
+    "replaceString": "",
+    "trimStrings": [],
+    "placement": [2],
+    "disabled": true,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  }
+]
