@@ -595,12 +595,21 @@
         if (r) return String(r);
       } catch (e) { tries.push('ctx.generateQuietPrompt: ' + e.message); }
     }
-    // 2) generateRaw
+    // 2) generateRaw（换几种参数写法，绕开 "No message generated"）
     if (typeof ctx.generateRaw === 'function') {
-      try {
-        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen });
-        if (r) return String(r);
-      } catch (e) { tries.push('ctx.generateRaw: ' + e.message); }
+      const variants = [
+        { systemPrompt: sys, prompt: user, responseLength: maxLen },
+        { systemPrompt: sys, prompt: user },
+        { prompt: sys + '\n\n' + user },
+        { prompt: user },
+      ];
+      for (let vi = 0; vi < variants.length; vi++) {
+        try {
+          const r = await ctx.generateRaw(variants[vi]);
+          if (r && String(r).trim()) return String(r);
+          tries.push('ctx.generateRaw#' + (vi + 1) + ': 空输出');
+        } catch (e) { tries.push('ctx.generateRaw#' + (vi + 1) + ': ' + e.message); }
+      }
     }
     // 3) 动态 import script.js（老版本把函数放在那里）
     const mod = await loadSTScript();
@@ -625,6 +634,18 @@
     throw new Error('都试过了没用：' + (tries.join(' | ') || '没有可用的生成接口'));
   }
 
+  function stHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    try {
+      const ctx = window.SillyTavern.getContext();
+      if (ctx && typeof ctx.getRequestHeaders === 'function') Object.assign(h, ctx.getRequestHeaders());
+    } catch (_) {}
+    if (!h['X-CSRF-Token']) {
+      const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+      if (m) h['X-CSRF-Token'] = decodeURIComponent(m[1]);
+    }
+    return h;
+  }
   async function proxyGenerate(sys, user, len) {
     const ctx = window.SillyTavern.getContext();
     const s = ctx.chatCompletionSettings || {};
@@ -644,10 +665,10 @@
         if (s[k] !== undefined && s[k] !== null && s[k] !== '') body[k] = s[k];
       });
     const r = await withTimeout(fetch('/api/backends/chat-completions/generate', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST', headers: stHeaders(), body: JSON.stringify(body),
     }), 120000, '酒馆补全代理 ');
     const t = await r.text();
-    if (!r.ok) throw new Error('HTTP ' + r.status + '：' + t.slice(0, 160));
+    if (!r.ok) throw new Error('HTTP ' + r.status + '：' + t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 120));
     let j = null; try { j = JSON.parse(t); } catch (_) {}
     if (!j) throw new Error('返回不是 JSON：' + t.slice(0, 160));
     if (j.error) throw new Error(j.error.message || JSON.stringify(j.error).slice(0, 160));
