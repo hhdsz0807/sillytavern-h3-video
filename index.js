@@ -527,7 +527,8 @@
 6) overall_soundscape 写全片环境声与物理声；non_diegetic_music 写只有观众听到的配乐（没有就 N/A）。
 7) 心理活动/内心独白转成画外音旁白：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；真说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两者都不要丢。
 8) 六段各出现一次，不要在 detailed_description 里重开 subject_definitions。
-9) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。`;
+9) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。
+10) 人名、地名、台词、服装颜色一律来自正文；不许套用任何示例里的名字或句子（例如 woman in a light-blue cardigan、抱歉 / 不要道歉啊 这类），不许留括号占位符。`;
 
   function applyInjection(verbose) {
     const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
