@@ -502,6 +502,15 @@
     status('ok', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
   }
 
+  let TICK = null;
+  function tick(prefix) {
+    clearInterval(TICK);
+    const t0 = Date.now();
+    TICK = setInterval(function () {
+      status('run', prefix + ' · 已等 ' + Math.round((Date.now() - t0) / 1000) + ' 秒…');
+    }, 2000);
+    return function () { clearInterval(TICK); TICK = null; };
+  }
   function status(kind, text) {
     const el = $('#h3v-status');
     if (!el) { LOG(kind, text); return; }
@@ -592,7 +601,7 @@
     // 1) 上下文里自带
     if (typeof ctx.generateQuietPrompt === 'function') {
       try {
-        const r = await ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen });
+        const r = await withTimeout(ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen }), 90000, '酒馆安静生成 ');
         if (r) return String(r);
       } catch (e) { tries.push('ctx.generateQuietPrompt: ' + e.message); }
     }
@@ -606,7 +615,7 @@
       ];
       for (let vi = 0; vi < variants.length; vi++) {
         try {
-          const r = await ctx.generateRaw(variants[vi]);
+          const r = await withTimeout(ctx.generateRaw(variants[vi]), 45000, '酒馆 raw 生成 ');
           if (r && String(r).trim()) return String(r);
           tries.push('ctx.generateRaw#' + (vi + 1) + ': 空输出');
         } catch (e) { tries.push('ctx.generateRaw#' + (vi + 1) + ': ' + e.message); }
@@ -616,13 +625,13 @@
     const mod = await loadSTScript();
     if (mod && typeof mod.generateQuietPrompt === 'function') {
       try {
-        const r = await mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen });
+        const r = await withTimeout(mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: maxLen }), 90000, '酒馆安静生成2 ');
         if (r) return String(r);
       } catch (e) { tries.push('script.generateQuietPrompt: ' + e.message); }
     }
     if (mod && typeof mod.generateRaw === 'function') {
       try {
-        const r = await mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen });
+        const r = await withTimeout(mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: maxLen }), 45000, '酒馆 raw 生成2 ');
         if (r) return String(r);
       } catch (e) { tries.push('script.generateRaw: ' + e.message); }
     }
@@ -722,7 +731,9 @@
   }
 
   function callAI(sys, user, len) {
-    return (S.aiMode === 'api') ? apiGenerate(sys, user, len) : stGenerate(sys, user, len);
+    const stop = tick(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
+    const p = (S.aiMode === 'api') ? apiGenerate(sys, user, len) : stGenerate(sys, user, len);
+    return Promise.resolve(p).then(function (v) { stop(); return v; }, function (e) { stop(); throw e; });
   }
 
   function aiDiag() {
