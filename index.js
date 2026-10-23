@@ -678,6 +678,22 @@
   }
 
   /* ---------- 两步：先规划时长与分镜，再逐段写六段 ---------- */
+  const CAST_SYS = `你是造型设定提取器。读用户给的角色扮演/小说正文，把**所有出场人物与主要场景**的外观固定下来，供后续每一段视频复用。
+只输出纯文本，每行一个标签，格式：
+<Subject 1>: 名字 + 年龄 + 脸/发/瞳/体型 + 服装（颜色款式）+ 是否赤脚
+<Subject 2>: 场景名 + 关键陈设与光线
+规则：只写正文里出现过的；外观写具体（颜色、款式），不写情绪；人物按出场顺序编号；最多 6 行；不要解释。`;
+
+  function normalizeBlock(b) {
+    let s = String(b || '');
+    s = s.replace(/^#{1,6}\s*/gm, '');
+    const names = 'subject_definitions|summary|retention_analysis|detailed_description|overall_soundscape|non_diegetic_music';
+    s = s.replace(new RegExp('\\*\\*(' + names + ')\\*\\*:?', 'gi'), '$1:');
+    s = s.replace(new RegExp('<(' + names + ')>:?', 'gi'), '$1:');
+    s = s.replace(new RegExp('</(' + names + ')>', 'gi'), '');
+    s = s.split('\n').filter(l => !/(选项|卡片|caption|字幕|界面文字|按钮|option cards?|选择肢)/i.test(l)).join('\n');
+    return s.trim();
+  }
   const PLAN_SYS = `你是视频分镜规划器。读用户给的正文，判断整段完整演完需要多少秒（按真实节奏估，不硬砍也不注水），并按每段最多 15 秒、最少 4 秒切分。
 只输出纯文本，格式严格如下，不要解释、不要代码块：
 总时长: 120s
@@ -751,7 +767,10 @@
       status('run', '① 先估时长 / 排分镜…');
       const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""', 900);
       const plan = parsePlan(planTxt);
-      status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；开始逐段写六段…');
+      status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
+      let castText = '';
+      try { castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 600)).trim(); } catch (e) { LOG('cast fail', e); }
+      status('run', '角色外观已锁定（' + (castText ? castText.split('\n').length : 0) + ' 行）；开始逐段写六段…');
 
       const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
       const blocks = [];
@@ -759,6 +778,7 @@
         const seg = plan.segs[i];
         const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
+          + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
@@ -768,7 +788,7 @@
         try { out = await callAI(SIX_SYS, user, 2600); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
-        if (b) blocks.push(b);
+        if (b) blocks.push(normalizeBlock(b));
         await new Promise(r => setTimeout(r, 200));
       }
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
