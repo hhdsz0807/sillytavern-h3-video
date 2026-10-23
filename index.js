@@ -819,31 +819,61 @@
     return out;
   }
 
+  function urlCandidates(base, path) {
+    const b = base.trim().replace(/\/+$/, '');
+    const out = [];
+    if (b.endsWith('/chat/completions') || b.endsWith('/models')) {
+      out.push(b);
+    } else {
+      out.push(b + path);
+      if (!/\/v1$/.test(b)) out.push(b + '/v1' + path);
+    }
+    return Array.from(new Set(out));
+  }
+
+  async function postJSON(urls, key, bodyObj, label) {
+    let lastErr = null;
+    for (const u of urls) {
+      try {
+        const r = await withTimeout(fetch(u, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
+          body: JSON.stringify(bodyObj),
+        }), 90000, label + ' ');
+        const txt = await r.text();
+        if (!r.ok) { lastErr = new Error(u + ' → HTTP ' + r.status + '：' + txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 140)); continue; }
+        let j = null; try { j = JSON.parse(txt); } catch (_) { lastErr = new Error(u + ' → 不是 JSON：' + txt.slice(0, 120)); continue; }
+        return { j, txt, url: u };
+      } catch (e) { lastErr = new Error(u + ' → ' + e.message); }
+    }
+    throw lastErr || new Error(label + '失败');
+  }
+
   async function apiGenerate(sys, user, len) {
-    const base = (S.aiBase || '').trim().replace(/\/+$/, '');
+    const base = (S.aiBase || '').trim();
     const key = (S.aiKey || '').trim();
     const model = (S.aiModel || '').trim();
     if (!base) throw new Error('先填自定义 API 地址');
     if (!model) throw new Error('先点「拉取模型」选一个');
-    const url = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
     const params = (S.usePreset === false) ? { max_tokens: (len || 1600) } : presetParams(len);
-    const r = await withTimeout(fetch(url, {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
-      body: JSON.stringify(Object.assign({
-        model: model, stream: false,
-        messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
-      }, params)),
-    }), 90000, 'AI 请求 ');
-    const t = await r.text();
-    let j = null; try { j = JSON.parse(t); } catch (_) {}
-    if (!j) throw new Error('返回不是 JSON：' + t.slice(0, 140));
-    if (j.error) throw new Error(j.error.message || JSON.stringify(j.error).slice(0, 140));
+    const bodyObj = Object.assign({
+      model: model, stream: false,
+      messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+    }, params);
+    const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, bodyObj, 'AI 请求');
+    if (j.error) throw new Error((j.error.message || JSON.stringify(j.error)).slice(0, 180));
     const ch = j.choices && j.choices[0];
-    const txt = ch && ch.message ? ch.message.content : (ch ? ch.text : '');
-    if (!txt) throw new Error('AI 没返回内容');
-    return String(txt);
+    let out = '';
+    if (ch && ch.message) out = ch.message.content || '';
+    else if (ch) out = ch.text || '';
+    else if (j.content) out = j.content;
+    else if (j.response) out = j.response;
+    if (!out) {
+      throw new Error('接口回了但没有正文（' + url + '）：' + JSON.stringify(j).slice(0, 200));
+    }
+    return String(out);
   }
+
   async function genSix() {
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
@@ -889,21 +919,29 @@
   }
 
   async function fetchModels() {
-    const base = ($('#h3v-aiBase').value || '').trim().replace(/\/+$/, '');
+    const base = ($('#h3v-aiBase').value || '').trim();
     const key = ($('#h3v-aiKey').value || '').trim();
     if (!base) { status('err', '先填 API 地址'); return; }
     status('run', '拉取模型列表…');
     try {
-      const url = base.endsWith('/models') ? base : base + '/models';
-      const r = await withTimeout(fetch(url, { headers: key ? { Authorization: 'Bearer ' + key } : {} }), 15000, '拉模型 ');
-      const j = await r.json();
+      let j = null, used = '';
+      let lastErr = null;
+      for (const u of urlCandidates(base, '/models')) {
+        try {
+          const r = await withTimeout(fetch(u, { headers: key ? { Authorization: 'Bearer ' + key } : {} }), 15000, '拉模型 ');
+          if (!r.ok) { lastErr = new Error(u + ' → HTTP ' + r.status); continue; }
+          j = await r.json(); used = u; break;
+        } catch (e) { lastErr = new Error(u + ' → ' + e.message); }
+      }
+      if (!j) throw lastErr || new Error('拉不到 /models');
       const arr = (j.data || j.models || []).map(x => (typeof x === 'string' ? x : (x.id || x.name))).filter(Boolean).sort();
-      if (!arr.length) throw new Error('接口没返回模型');
-      $('#h3v-aiModel').innerHTML = arr.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+      if (!arr.length) throw new Error('接口没返回模型：' + JSON.stringify(j).slice(0, 160));
+      $('#h3v-aiModel').innerHTML = arr.map(m => '<option value="' + esc(m) + '">' + esc(m) + '</option>').join('');
       S.aiModel = arr.includes(S.aiModel) ? S.aiModel : arr[0];
       $('#h3v-aiModel').value = S.aiModel;
+      S.aiBase = ($('#h3v-aiBase').value || '').trim();
       saveS();
-      status('ok', '拉到 ' + arr.length + ' 个模型，已选 ' + S.aiModel);
+      status('ok', '拉到 ' + arr.length + ' 个模型（' + used + '），已选 ' + S.aiModel);
     } catch (e) { status('err', '拉模型失败：' + e.message); }
   }
 
