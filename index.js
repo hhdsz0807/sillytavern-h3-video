@@ -115,6 +115,7 @@
           <div class="row"><label>模型</label>
             <select id="h3v-aiModel" style="flex:1"></select>
             <button id="h3v-models" style="flex:none">拉取模型</button>
+            <button id="h3v-testapi" style="flex:none">测 API</button>
           </div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用预设采样参数（温度/top_p/惩罚/stop/seed）</label></div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePresetPrompt" checked> 把预设里的提示词也作为参考带上</label></div>
@@ -204,6 +205,7 @@
       $('#h3v-aiKey').onchange = () => { S.aiKey = $('#h3v-aiKey').value.trim(); saveS(); };
       $('#h3v-aiModel').onchange = () => { S.aiModel = $('#h3v-aiModel').value; saveS(); };
       $('#h3v-models').onclick = fetchModels;
+      if ($('#h3v-testapi')) $('#h3v-testapi').onclick = testApi;
       if ($('#h3v-usePreset')) {
         $('#h3v-usePreset').checked = S.usePreset !== false;
         $('#h3v-usePreset').onchange = function () { S.usePreset = $('#h3v-usePreset').checked; saveS(); };
@@ -849,6 +851,45 @@
     throw lastErr || new Error(label + '失败');
   }
 
+  function extractText(j) {
+    const ch = j && j.choices && j.choices[0];
+    if (ch) {
+      if (ch.message) {
+        const c = ch.message.content;
+        if (typeof c === 'string' && c.trim()) return c;
+        if (Array.isArray(c)) {
+          const s = c.map(x => (x && (x.text || x.content)) || '').join('');
+          if (s.trim()) return s;
+        }
+      }
+      if (typeof ch.text === 'string' && ch.text.trim()) return ch.text;
+      if (ch.delta && typeof ch.delta.content === 'string' && ch.delta.content.trim()) return ch.delta.content;
+    }
+    if (typeof j.content === 'string' && j.content.trim()) return j.content;
+    if (Array.isArray(j.content)) {
+      const s = j.content.map(x => (x && (x.text || x.content)) || '').join('');
+      if (s.trim()) return s;
+    }
+    if (typeof j.response === 'string' && j.response.trim()) return j.response;
+    if (typeof j.output_text === 'string' && j.output_text.trim()) return j.output_text;
+    return '';
+  }
+
+  async function testApi() {
+    const base = ($('#h3v-aiBase').value || '').trim();
+    const key = ($('#h3v-aiKey').value || '').trim();
+    const model = ($('#h3v-aiModel').value || S.aiModel || '').trim();
+    if (!base || !model) { status('err', '先填地址、拉到模型'); return; }
+    status('run', '测接口中…');
+    try {
+      const body = { model: model, stream: false, max_tokens: 30, messages: [{ role: 'user', content: '只回两个字：收到' }] };
+      const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, body, '测接口');
+      const got = extractText(j);
+      if (got) status('ok', '接口可用 · ' + url + '\n模型回：' + got.slice(0, 60));
+      else status('err', '接口通但没正文 · ' + url + '\n原始：' + txt.slice(0, 380));
+    } catch (e) { status('err', '测接口失败：' + e.message); }
+  }
+
   async function apiGenerate(sys, user, len) {
     const base = (S.aiBase || '').trim();
     const key = (S.aiKey || '').trim();
@@ -862,14 +903,9 @@
     }, params);
     const { j, txt, url } = await postJSON(urlCandidates(base, '/chat/completions'), key, bodyObj, 'AI 请求');
     if (j.error) throw new Error((j.error.message || JSON.stringify(j.error)).slice(0, 180));
-    const ch = j.choices && j.choices[0];
-    let out = '';
-    if (ch && ch.message) out = ch.message.content || '';
-    else if (ch) out = ch.text || '';
-    else if (j.content) out = j.content;
-    else if (j.response) out = j.response;
+    const out = extractText(j);
     if (!out) {
-      throw new Error('接口回了但没有正文（' + url + '）：' + JSON.stringify(j).slice(0, 200));
+      throw new Error('接口回了但没有正文（' + url + '）：' + String(txt || '').slice(0, 400));
     }
     return String(out);
   }
