@@ -115,8 +115,8 @@
 
     $('#h3v-x').onclick = closePanel;
     $('#h3v-x2').onclick = closePanel;
-    $('#h3v-host').onchange = () => { S.host = ($('#h3v-host').value || DEFA.host).trim().replace(/\/+$/, ''); saveS(); loadMeta(); };
-    $('#h3v-ping').onclick = () => loadMeta();
+    $('#h3v-host').onchange = () => { S.host = ($('#h3v-host').value || DEFA.host).trim().replace(/\/+$/, ''); saveS(); pingNow(); };
+    $('#h3v-ping').onclick = pingNow;
     $('#h3v-sec').onchange = () => { S.seconds = Number($('#h3v-sec').value) || 12; saveS(); };
     $('#h3v-steps').onchange = () => { S.steps = Number($('#h3v-steps').value) || 12; saveS(); };
     $('#h3v-mp').onchange = () => { S.mp = $('#h3v-mp').value; saveS(); };
@@ -182,19 +182,47 @@
   /* ---------- 与 H3工作台 通信 ---------- */
   const api = (path) => (S.host || DEFA.host) + path;
 
+  async function withTimeout(promise, ms, label) {
+    let t;
+    const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(label + '超时（' + ms / 1000 + ' 秒）')), ms); });
+    try { return await Promise.race([promise, timeout]); } finally { clearTimeout(t); }
+  }
+
   async function jget(path) {
-    const r = await fetch(api(path));
+    const r = await withTimeout(fetch(api(path)), 8000, '请求 ');
     const t = await r.text();
     let j = {}; try { j = JSON.parse(t); } catch (_) { throw new Error('返回不是 JSON：' + t.slice(0, 120)); }
     if (j.error) throw new Error(j.error);
     return j;
   }
   async function jpost(path, body) {
-    const r = await fetch(api(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const r = await withTimeout(fetch(api(path), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    }), 30000, '提交 ');
     const t = await r.text();
     let j = {}; try { j = JSON.parse(t); } catch (_) { throw new Error('返回不是 JSON：' + t.slice(0, 120)); }
     if (j.error) throw new Error(j.error);
     return j;
+  }
+
+  let PINGING = false;
+  async function pingNow() {
+    if (PINGING) return;
+    PINGING = true;
+    const btn = $('#h3v-ping');
+    if (btn) { btn.disabled = true; btn.textContent = '连接中…'; }
+    status('run', '正在连接 ' + (S.host || DEFA.host) + ' …');
+    try {
+      const meta = await jget('/api/mm/meta');
+      META = meta;
+      fillSelects();
+      status('ok', '连接成功：可用图 ' + (META.images || []).length + ' 张');
+    } catch (e) {
+      status('err', '连接失败：' + (e && e.message ? e.message : e));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
+      PINGING = false;
+    }
   }
 
   async function loadMeta() {
@@ -203,7 +231,7 @@
       fillSelects();
       status('ok', '已连上 H3工作台：可用图 ' + (META.images || []).length + ' 张');
     } catch (e) {
-      status('err', '连不上 H3工作台：' + e.message + '\n检查：APK 开着没、地址是否 http://127.0.0.1:8899');
+      status('err', '连不上 H3工作台：' + (e && e.message ? e.message : e) + '\n检查：APK 开着没、地址是否 http://127.0.0.1:8899');
     }
   }
 
@@ -332,6 +360,7 @@
   document.addEventListener('click', function (e) {
     const t = e.target;
     if (!t || !t.closest) return;
+    if (t.closest('#h3v-ping')) { pingNow(); return; }
     const b = t.closest('.h3v-msgbtn');
     if (!b) return;
     e.preventDefault();
@@ -376,6 +405,10 @@ N/A
     try {
       ensureUI();
       attachMessageButtons();
+      window.addEventListener('error', (ev) => {
+        const el = $('#h3v-status');
+        if (el) { el.className = 'on err'; el.textContent = '脚本错误：' + (ev && ev.message ? ev.message : ev); }
+      });
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
       if (ctx && ctx.eventSource && ctx.eventTypes) {
         ctx.eventSource.on(ctx.eventTypes.MESSAGE_RENDERED, () => setTimeout(attachMessageButtons, 120));
