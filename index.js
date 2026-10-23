@@ -427,7 +427,9 @@
 4) retention_analysis 每个标签一行：<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - …（或 partially_preserved / attribute_transfer / weak_reference），这里不写 (Sx)。
 5) detailed_description 先一到两句风格，再逐镜头：[Shot 1] 无时间戳，第 2 镜起 [Shot N] At MM:SS.mmm, …；写清构图、主体外观与位置、环境光线、动作、镜头运动、同期声；说话人用 (S1)(S2)，引用主体写 <Subject N> (Sx)；生成类任务 350–500 英文词。
 6) overall_soundscape 写全片环境声与物理声；non_diegetic_music 写只有观众听到的配乐（没有就 N/A）。
-7) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。`;
+7) 心理活动/内心独白转成画外音旁白：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；真说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两者都不要丢。
+8) 六段各出现一次，不要在 detailed_description 里重开 subject_definitions。
+9) 总时长与用户给的秒数一致；不要写成剧情梗概；六段之外不要任何解释。`;
 
   function applyInjection(verbose) {
     const on = $('#h3v-inject') ? $('#h3v-inject').checked : true;
@@ -459,7 +461,9 @@
 5) detailed_description：先一到两句全片风格，再逐镜头。[Shot 1] 不带时间戳；第 2 镜起 [Shot N] At MM:SS.mmm, …。每镜写清构图、主体外观与位置、环境与光线、动作与状态变化、镜头运动、同期声音，以及参考内容出现的准确时点。说话人给稳定编号 (S1)(S2)…，引用主体时写 <Subject N> (Sx)。生成类任务正文约 350–500 英文词。
 6) overall_soundscape：全片环境声与物理声概述（对白与逐镜同步音留在 detailed_description）。
 7) non_diegetic_music：只有观众能听到的配乐，写乐器/速度/动态；没有就写 N/A。
-8) 总时长必须与用户给的秒数一致；不要写成剧情梗概。`;
+8) 正文里的心理活动、内心独白（斜体、*…*、【心想】这类）要转成画外音旁白，写在 detailed_description 里：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；角色真正说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两种都要保留，不要丢。
+9) 六段每段只出现一次；不要在 detailed_description 里重新开始写 subject_definitions / summary / retention_analysis。
+10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
