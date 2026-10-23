@@ -118,8 +118,14 @@
           <p class="hint">填地址后点「拉取模型」，列表从 /models 自动取，不用手打模型名。</p>
         </div>
 
+        <div class="row"><label>分段</label>
+          <select id="h3v-block" style="flex:1"></select>
+          <span class="hint" id="h3v-blockHint"></span>
+        </div>
+
         <div class="row" style="margin-top:8px">
-          <button class="primary" id="h3v-run">生成视频</button>
+          <button class="primary" id="h3v-run">生成这一条</button>
+          <button id="h3v-runAll">全部按顺序生成</button>
           <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
         </div>
 
@@ -162,6 +168,13 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    if ($('#h3v-runAll')) $('#h3v-runAll').onclick = runAllBlocks;
+    if ($('#h3v-prompt')) {
+      $('#h3v-prompt').addEventListener('input', () => {
+        clearTimeout(ensureUI._t);
+        ensureUI._t = setTimeout(refreshBlockList, 400);
+      });
+    }
     dlg.addEventListener('close', () => { dlg.style.display = 'none'; });
     dlg.addEventListener('cancel', () => { dlg.style.display = 'none'; });
 
@@ -208,9 +221,11 @@
       } else {
         d.setAttribute('open', '');
       }
-      const ex = extractPrompt(text || lastMessageText());
-      CURTEXT = text || lastMessageText() || '';
+      const t = text || lastMessageText();
+      CURTEXT = t || '';
+      const ex = extractPrompt(t);
       if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
+      refreshBlockList();
       fillSelects();
       loadMeta();
       LOG('opened', !!ex);
@@ -348,60 +363,141 @@
     inp.click();
   }
 
-  async function runVideo() {
-    const prompt = $('#h3v-prompt').value.trim();
-    if (!prompt) { status('err', '没有提示词：让模型按模板输出 [[H3]]…[[/H3]]，或直接粘六段'); return; }
+  /* ---------- 分段解析 ---------- */
+  function parseBlocks(text) {
+    const out = [];
+    const re = /\[\[H3\]\]([\s\S]*?)\[\[\/H3\]\]/g;
+    let m;
+    while ((m = re.exec(text || ''))) out.push(m[1].trim());
+    if (!out.length) { const e = extractPrompt(text); if (e) out.push(e); }
+    return out;
+  }
+
+  function blockSeconds(b) {
+    let max = 0;
+    const re = /At\s+(\d{1,2}):(\d{2})\.(\d{3})/g;
+    let m;
+    while ((m = re.exec(b))) {
+      const s = Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 1000;
+      if (s > max) max = s;
+    }
+    let v = max > 0 ? Math.ceil(max * 2) / 2 + 0.6 : (Number(S.seconds) || 15);
+    v = Math.min(15, Math.max(3, v));
+    return Math.round(v * 2) / 2;
+  }
+
+  function refreshBlockList() {
+    const sel = $('#h3v-block');
+    if (!sel) return;
+    const blocks = parseBlocks($('#h3v-prompt').value);
+    const prev = sel.value;
+    sel.innerHTML = blocks.map((b, i) => {
+      const d = blockSeconds(b);
+      return `<option value="${i}">第 ${i + 1} 条 · ${d}s${i === 0 ? ' · 从 0 秒开始' : ''}</option>`;
+    }).join('') || '<option value="0">（没有 [[H3]] 块）</option>';
+    if (prev && Number(prev) < blocks.length) sel.value = prev;
+    const total = blocks.reduce((a, b) => a + blockSeconds(b), 0);
+    const hint = $('#h3v-blockHint');
+    if (hint) hint.textContent = blocks.length ? (blocks.length + ' 条 · 合计 ' + total.toFixed(1) + ' 秒') : '没解析到 [[H3]] 块';
+    if ($('#h3v-runAll')) $('#h3v-runAll').disabled = blocks.length < 2;
+  }
+
+  /* ---------- 提交 / 轮询（支持多条顺序跑） ---------- */
+  async function submitBlock(blockText, seconds) {
     const images = [];
     for (let i = 0; i < 6; i++) {
       const sel = document.querySelector(`#h3v-views select[data-v="${i}"]`);
       if (sel && sel.value) images.push(sel.value);
     }
     if ($('#h3v-scene').value) images.push($('#h3v-scene').value);
-    if (!images.length) { status('err', '至少放一张图（四视图或场景图）'); return; }
-
-    const btn = $('#h3v-run');
-    btn.disabled = true;
-    status('run', '提交中…（图 ' + images.length + ' 张 / ' + $('#h3v-sec').value + ' 秒）');
-    try {
-      const j = await jpost('/api/mm/run', {
-        images: images,
-        prompt: prompt,
-        seconds: Number($('#h3v-sec').value) || 12,
-        megapixels: Number($('#h3v-mp').value) || 0.98,
-        aspect: S.aspect,
-        steps: Number($('#h3v-steps').value) || 12,
-        deleteCloud: $('#h3v-del').checked,
-      });
-      status('run', '已提交 taskId=' + j.taskId + '\n云端跑片约 4–7 分钟…');
-      poll(j.taskId);
-    } catch (e) {
-      status('err', '提交失败：' + e.message);
-      btn.disabled = false;
-    }
+    if (!images.length) throw new Error('至少放一张图（四视图或场景图）');
+    const j = await jpost('/api/mm/run', {
+      images: images,
+      prompt: blockText,
+      seconds: seconds,
+      megapixels: Number($('#h3v-mp').value) || 0.98,
+      aspect: S.aspect,
+      steps: Number($('#h3v-steps').value) || 12,
+      deleteCloud: $('#h3v-del').checked,
+    });
+    return j.taskId;
   }
 
-  function poll(taskId) {
-    clearInterval(POLL);
-    const t0 = Date.now();
-    POLL = setInterval(async () => {
-      const el = Math.round((Date.now() - t0) / 1000);
+  function waitTask(taskId, label) {
+    return new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      const timer = setInterval(async () => {
+        const el = Math.round((Date.now() - t0) / 1000);
+        try {
+          const j = await jget('/api/status?id=' + encodeURIComponent(taskId));
+          if (j.state === 'done') {
+            clearInterval(timer);
+            if (j.status === 'error') return reject(new Error(j.message || '云端报错'));
+            resolve({ items: (j.items || []).filter(x => x.isVideo), coins: j.coins || 0, secs: el });
+          } else {
+            status('run', (label ? label + ' · ' : '') + (j.state === 'running' ? '云端正在跑' : '排队中')
+              + '… ' + Math.floor(el / 60) + ' 分 ' + (el % 60) + ' 秒');
+          }
+        } catch (e) { status('run', '查询抖动，继续等：' + e.message); }
+      }, 10000);
+    });
+  }
+
+  function showVideos(r, label) {
+    const html = r.items.map(v =>
+      `<div style="margin-top:10px"><div class="hint">${esc(label || '')}</div>
+       <video src="${api(v.url)}" controls playsinline></video>
+       <div><a href="${api(v.url)}" download="${esc(v.filename || 'h3.mp4')}">下载</a></div></div>`).join('');
+    $('#h3v-out').innerHTML = html + $('#h3v-out').innerHTML;
+  }
+
+  async function runOne(blockText, seconds, label) {
+    status('run', (label ? label + ' · ' : '') + '提交中…');
+    const id = await submitBlock(blockText, seconds);
+    status('run', (label ? label + ' · ' : '') + 'taskId=' + id + '，云端跑片约 4–7 分钟…');
+    return await waitTask(id, label);
+  }
+
+  async function runVideo() {
+    const blocks = parseBlocks($('#h3v-prompt').value);
+    if (!blocks.length) { status('err', '没有提示词：点「按正文生成六段」或直接粘'); return; }
+    const sel = Number(($('#h3v-block') || {}).value || 0);
+    const idx = Math.min(sel, blocks.length - 1);
+    const b = blocks[idx];
+    const sec = blockSeconds(b);
+    const btn = $('#h3v-run');
+    btn.disabled = true;
+    try {
+      const r = await runOne(b, sec, '第' + (idx + 1) + '条');
+      showVideos(r, '第 ' + (idx + 1) + ' 条 · ' + sec + 's');
+      status('ok', '第' + (idx + 1) + '条完成 · 用时 ' + Math.floor(r.secs / 60) + ' 分 ' + (r.secs % 60) + ' 秒'
+        + (r.coins ? ' · ' + r.coins + ' 币' : ''));
+    } catch (e) { status('err', '失败：' + e.message); }
+    btn.disabled = false;
+    refreshBlockList();
+  }
+
+  async function runAllBlocks() {
+    const blocks = parseBlocks($('#h3v-prompt').value);
+    if (!blocks.length) { status('err', '没有提示词'); return; }
+    if (blocks.length === 1) return runVideo();
+    const btn = $('#h3v-runAll');
+    btn.disabled = true;
+    let okN = 0, coins = 0;
+    for (let i = 0; i < blocks.length; i++) {
+      const sec = blockSeconds(blocks[i]);
+      status('run', '第 ' + (i + 1) + ' / ' + blocks.length + ' 条提交中…（' + sec + 's）');
       try {
-        const j = await jget('/api/status?id=' + encodeURIComponent(taskId));
-        if (j.state === 'done') {
-          clearInterval(POLL);
-          $('#h3v-run').disabled = false;
-          if (j.status === 'error') { status('err', '云端报错：' + (j.message || '')); return; }
-          const vids = (j.items || []).filter(x => x.isVideo);
-          status('ok', '完成，用时 ' + Math.floor(el / 60) + ' 分 ' + (el % 60) + ' 秒' + (j.coins ? ' · ' + j.coins + ' 币' : ''));
-          if (!vids.length) { status('err', '没拿到视频输出'); return; }
-          $('#h3v-out').innerHTML = vids.map(v =>
-            `<video src="${api(v.url)}" controls playsinline></video>
-             <div><a href="${api(v.url)}" download="${esc(v.filename || 'h3.mp4')}">下载</a></div>`).join('');
-        } else {
-          status('run', (j.state === 'running' ? '云端正在跑' : '排队中') + '… 已等 ' + Math.floor(el / 60) + ' 分 ' + (el % 60) + ' 秒');
-        }
-      } catch (e) { status('run', '查询抖动，继续等：' + e.message); }
-    }, 10000);
+        const r = await runOne(blocks[i], sec, '第' + (i + 1) + '/' + blocks.length + '条');
+        okN++; coins += r.coins;
+        showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
+      } catch (e) {
+        status('err', '第 ' + (i + 1) + ' 条失败：' + e.message + '（继续下一条）');
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    btn.disabled = false;
+    status('ok', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
   }
 
   function status(kind, text) {
@@ -451,9 +547,15 @@
   /* ---------- AI 按正文生成六段 ---------- */
   let CURTEXT = '';
 
-  const SIX_SYS = `你是 MiniMax H3 全参考模式（Ref2VA）提示词作者。把用户给的正文改写成官方六段格式，只输出六段：[[H3]] 开头、[[/H3]] 结尾，段名与顺序严格为 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。
+  const SIX_SYS = `你是 MiniMax H3 全参考模式（Ref2VA）提示词作者。把用户给的正文改写成官方六段格式。
 
-官方规则：
+【先分条】先估算这段正文完整演完需要多少秒（按镜头节奏，不硬凑也不硬砍）。H3 单条视频最长 15 秒、最短 4 秒，所以：
+- 要 N 条就输出 N 个 [[H3]]…[[/H3]] 块，块与块之间空一行；
+- 每块都是**完整六段**（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music），不是把六段拆开；
+- <Subject N> 编号在所有块之间保持一致；每块的 [Shot 1] 从 0 秒重新开始，块内最后一镜不超过 14.5 秒；
+- 不要把两分钟的剧情硬塞进一条 15 秒，也不要为了凑数把一段戏砍碎。
+
+【六段规则】
 1) 六段全写英文；只有台词、歌词、画面里可见的文字保留原语言，台词写成 <d>[Chinese] …</d>。
 2) subject_definitions：把要复用的可见内容逐个定义为 <Subject N>（人物、场景、服装道具等），每个一行，说明标签指什么、主要特征。参考图仅用于定义角色/场景/服装/风格时，不要单独写 <Picture N> 行，把来源写进对应 Subject，例如：<Subject 1> is the young woman in <Picture 1>, with long dark hair, wearing …, 只有当某张图本身是某镜首帧/关键帧/尾帧/构图锚点时，才单独写 <Picture N> is the first frame of [Shot 1], …
 3) summary：一段英文，以方括号任务类型开头（如 [reference generation]），只用已定义的标签，不引入新标签。
