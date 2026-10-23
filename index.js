@@ -765,8 +765,7 @@
       } else {
         prompts.forEach(p => { if (p && p.content && String(p.content).trim()) push(p); });
       }
-      let txt = parts.join('\n\n');
-      if (txt.length > 4000) txt = txt.slice(0, 4000);
+      const txt = parts.join('\n\n');   // 不截断，预设提示词全文带上
       PRESET_PROMPTS = txt;
       return txt;
     } catch (e) {
