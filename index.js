@@ -116,7 +116,8 @@
             <select id="h3v-aiModel" style="flex:1"></select>
             <button id="h3v-models" style="flex:none">拉取模型</button>
           </div>
-          <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用酒馆「对话补全预设」参数（温度/top_p/惩罚/stop/seed，只是不用酒馆的模型和连接）</label></div>
+          <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用预设采样参数（温度/top_p/惩罚/stop/seed）</label></div>
+          <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePresetPrompt" checked> 把预设里的提示词也作为参考带上</label></div>
           <p class="hint">填地址后点「拉取模型」，列表从 /models 自动取，不用手打模型名。</p>
         </div>
 
@@ -203,6 +204,14 @@
       $('#h3v-aiKey').onchange = () => { S.aiKey = $('#h3v-aiKey').value.trim(); saveS(); };
       $('#h3v-aiModel').onchange = () => { S.aiModel = $('#h3v-aiModel').value; saveS(); };
       $('#h3v-models').onclick = fetchModels;
+      if ($('#h3v-usePreset')) {
+        $('#h3v-usePreset').checked = S.usePreset !== false;
+        $('#h3v-usePreset').onchange = function () { S.usePreset = $('#h3v-usePreset').checked; saveS(); };
+      }
+      if ($('#h3v-usePresetPrompt')) {
+        $('#h3v-usePresetPrompt').checked = S.usePresetPrompt !== false;
+        $('#h3v-usePresetPrompt').onchange = function () { S.usePresetPrompt = $('#h3v-usePresetPrompt').checked; saveS(); PRESET_PROMPTS = null; };
+      }
       if (S.aiModel) $('#h3v-aiModel').innerHTML = `<option value="${esc(S.aiModel)}">${esc(S.aiModel)}</option>`;
       syncAiMode();
     }
@@ -731,9 +740,54 @@
     return out;
   }
 
+  /* ---------- 酒馆「对话补全预设」里的提示词 ---------- */
+  let PRESET_PROMPTS = null;
+  async function getPresetPrompts() {
+    if (PRESET_PROMPTS !== null) return PRESET_PROMPTS;
+    try {
+      const r = await withTimeout(fetch('/api/settings/get', { method: 'POST', headers: stHeaders(), body: '{}' }), 15000, '读酒馆设置 ');
+      const j = await r.json();
+      const oai = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
+      const prompts = Array.isArray(oai.prompts) ? oai.prompts : [];
+      const byId = {};
+      prompts.forEach(p => { if (p && p.identifier) byId[p.identifier] = p; });
+
+      // 找到当前预设对应的 prompt_order（100001 = 预设级，100000 = 全局）
+      let order = [];
+      const po = Array.isArray(oai.prompt_order) ? oai.prompt_order : [];
+      const pick = po.find(x => x && x.character_id === 100001) || po.find(x => x && x.character_id === 100000);
+      if (pick && Array.isArray(pick.order)) order = pick.order;
+
+      const parts = [];
+      const push = (p) => { if (p && p.content && String(p.content).trim()) parts.push('[' + (p.name || p.identifier) + ']\n' + String(p.content).trim()); };
+      if (order.length) {
+        order.forEach(o => { if (!o || o.enabled === false) return; const p = byId[o.identifier]; if (p) push(p); });
+      } else {
+        prompts.forEach(p => { if (p && p.content && String(p.content).trim()) push(p); });
+      }
+      let txt = parts.join('\n\n');
+      if (txt.length > 4000) txt = txt.slice(0, 4000);
+      PRESET_PROMPTS = txt;
+      return txt;
+    } catch (e) {
+      LOG('preset prompts fail', e);
+      PRESET_PROMPTS = '';
+      return '';
+    }
+  }
+
+  async function withPreset(sys, user) {
+    if (S.aiMode !== 'api') return [sys, user];
+    if (S.usePresetPrompt === false) return [sys, user];
+    const extra = await getPresetPrompts();
+    if (!extra) return [sys, user];
+    return [sys + '\n\n【酒馆对话补全预设里的提示词（风格与规则参考，冲突时以上面的六段规范为准）】\n' + extra, user];
+  }
   function callAI(sys, user, len) {
     const stop = tick(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
-    const p = (S.aiMode === 'api') ? apiGenerate(sys, user, len) : stGenerate(sys, user, len);
+    const p = withPreset(sys, user).then(function (pair) {
+      return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
+    });
     return Promise.resolve(p).then(function (v) { stop(); return v; }, function (e) { stop(); throw e; });
   }
 
