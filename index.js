@@ -107,6 +107,7 @@
             <option value="api">自定义 API</option>
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成六段</button>
+          <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
           <div class="row"><label>API 地址</label><input type="text" id="h3v-aiBase" placeholder="https://api.deepseek.com/v1"></div>
@@ -205,6 +206,7 @@
       syncAiMode();
     }
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
+    if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
 
     fillSelects();
   }
@@ -571,23 +573,97 @@
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
   }
 
+  async function loadSTScript() {
+    try {
+      const srcs = Array.from(document.querySelectorAll('script[src]')).map(x => x.src);
+      const s = srcs.find(u => /\/script\.js(\?|$)/.test(u));
+      if (!s) return null;
+      return await import(s);
+    } catch (e) { LOG('import script.js fail', e); return null; }
+  }
+
   async function stGenerate(sys, user) {
     const ctx = window.SillyTavern.getContext();
     if (!ctx) throw new Error('拿不到 SillyTavern 上下文');
-    const quietPrompt = sys + '\n\n' + user;
-    try {
-      if (typeof ctx.generateQuietPrompt === 'function') {
-        const r = await ctx.generateQuietPrompt({ quietPrompt: quietPrompt, quietName: 'h3v-six', responseLength: 1200 });
+    const tries = [];
+
+    // 1) 上下文里自带
+    if (typeof ctx.generateQuietPrompt === 'function') {
+      try {
+        const r = await ctx.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: 1600 });
         if (r) return String(r);
-      }
-    } catch (e) { LOG('generateQuietPrompt fail', e); }
-    try {
-      if (typeof ctx.generateRaw === 'function') {
-        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1200 });
+      } catch (e) { tries.push('ctx.generateQuietPrompt: ' + e.message); }
+    }
+    // 2) generateRaw
+    if (typeof ctx.generateRaw === 'function') {
+      try {
+        const r = await ctx.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1600 });
         if (r) return String(r);
-      }
-    } catch (e) { LOG('generateRaw fail', e); }
-    throw new Error('这个酒馆版本不允许扩展直接调生成（需要 generateQuietPrompt / generateRaw），改用「自定义 API」');
+      } catch (e) { tries.push('ctx.generateRaw: ' + e.message); }
+    }
+    // 3) 动态 import script.js（老版本把函数放在那里）
+    const mod = await loadSTScript();
+    if (mod && typeof mod.generateQuietPrompt === 'function') {
+      try {
+        const r = await mod.generateQuietPrompt({ quietPrompt: sys + '\n\n' + user, quietName: 'h3v-six', responseLength: 1600 });
+        if (r) return String(r);
+      } catch (e) { tries.push('script.generateQuietPrompt: ' + e.message); }
+    }
+    if (mod && typeof mod.generateRaw === 'function') {
+      try {
+        const r = await mod.generateRaw({ systemPrompt: sys, prompt: user, responseLength: 1600 });
+        if (r) return String(r);
+      } catch (e) { tries.push('script.generateRaw: ' + e.message); }
+    }
+    // 4) 直接打酒馆自己的补全代理（用当前连接设置）
+    try {
+      const r = await proxyGenerate(sys, user);
+      if (r) return r;
+    } catch (e) { tries.push('backend proxy: ' + e.message); }
+
+    throw new Error('都试过了没用：' + (tries.join(' | ') || '没有可用的生成接口'));
+  }
+
+  async function proxyGenerate(sys, user) {
+    const ctx = window.SillyTavern.getContext();
+    const s = ctx.chatCompletionSettings || {};
+    const src = s.chat_completion_source || 'openai';
+    const model = s.openai_model || s.claude_model || s.openrouter_model || s.custom_model || s.model || '';
+    const body = {
+      chat_completion_source: src,
+      model: model,
+      messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+      temperature: (s.temperature != null ? s.temperature : 0.7),
+      max_tokens: 1600,
+      stream: false,
+    };
+    ['reverse_proxy', 'proxy_password', 'proxy_url', 'custom_url', 'custom_include_body', 'custom_exclude_body',
+      'custom_include_headers', 'openai_model', 'claude_model', 'google_model', 'vertexai_model', 'mistralai_model',
+      'cohere_model', 'perplexity_model', 'groq_model', 'deepseek_model', 'xai_model'].forEach(k => {
+        if (s[k] !== undefined && s[k] !== null && s[k] !== '') body[k] = s[k];
+      });
+    const r = await withTimeout(fetch('/api/backends/chat-completions/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }), 120000, '酒馆补全代理 ');
+    const t = await r.text();
+    if (!r.ok) throw new Error('HTTP ' + r.status + '：' + t.slice(0, 160));
+    let j = null; try { j = JSON.parse(t); } catch (_) {}
+    if (!j) throw new Error('返回不是 JSON：' + t.slice(0, 160));
+    if (j.error) throw new Error(j.error.message || JSON.stringify(j.error).slice(0, 160));
+    const txt = (j.choices && j.choices[0] && (j.choices[0].message ? j.choices[0].message.content : j.choices[0].text)) || j.content || '';
+    if (!txt) throw new Error('代理没返回内容');
+    return String(txt);
+  }
+
+  function aiDiag() {
+    const ctx = window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
+    if (!ctx) { status('err', '拿不到 SillyTavern.getContext()'); return; }
+    const fns = ['generateQuietPrompt', 'generateRaw', 'generate', 'executeSlashCommands', 'executeSlashCommandsWithOptions']
+      .map(k => k + '=' + (typeof ctx[k])).join(', ');
+    const s = ctx.chatCompletionSettings || {};
+    status('ok', 'ST API：' + fns + '\n连接源=' + (s.chat_completion_source || '?')
+      + ' 模型=' + (s.openai_model || s.claude_model || s.custom_model || '?')
+      + '\n(ctx 可用项 ' + Object.keys(ctx).length + ' 个)');
   }
 
   async function apiGenerate(sys, user) {
