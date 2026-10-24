@@ -3240,7 +3240,7 @@
   function syncAiMode() {
     const box = $('#h3v-apiBox');
     if (!box) return;
-    box.style.display = (S.aiMode === 'api') ? 'block' : 'none';
+  box.style.display = (S.aiMode === 'api' || S.aiMode === 'agent') ? 'block' : 'none';
   }
 
   /* ---------- 楼层按钮 ---------- */
