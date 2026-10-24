@@ -146,6 +146,9 @@
             <option value="api">自定义 API</option>
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
+          <label style="min-width:auto">并发</label>
+          <input type="number" id="h3v-genConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none">
+          <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
           <button id="h3v-cancelAI" style="flex:none">取消</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
@@ -329,6 +332,14 @@
     };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-qc')) $('#h3v-qc').onclick = function () { qcFix(false); };
+    if ($('#h3v-genConc')) {
+      $('#h3v-genConc').value = String(S.genConc || 3);
+      $('#h3v-genConc').onchange = function () { S.genConc = Number($('#h3v-genConc').value) || 3; saveS(); };
+    }
+    if ($('#h3v-autoQc')) {
+      $('#h3v-autoQc').checked = !!S.autoQc;
+      $('#h3v-autoQc').onchange = function () { S.autoQc = $('#h3v-autoQc').checked; saveS(); };
+    }
     if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
     if ($('#h3v-sceneStyle')) {
       $('#h3v-sceneStyle').value = S.sceneStyle || 'anime';
@@ -2152,59 +2163,72 @@
       pgSet(30);
 
       const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
-      const blocks = [];
-      let lastBlock = '';
-      for (let i = 0; i < plan.segs.length; i++) {
+      const blocksArr = new Array(plan.segs.length).fill(null);
+      const GENCONC = Math.max(1, Number(S.genConc || 3));
+      let nextI = 0, doneI = 0;
+
+      async function genOne(i) {
         const seg = plan.segs[i];
         const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
-        const prevTail = lastBlock ? blockTail(lastBlock) : '';
+        const prevBlock = i > 0 ? blocksArr[i - 1] : null;
+        const prevTail = prevBlock ? blockTail(prevBlock) : '';
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
           + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
           + '【素材清单】每段第一行的 CAST 标记只能用下面清单里的原字名字；本段出现谁就写谁，没出现的不写：\n' + assets.text + '\n'
-          + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld footage 等实拍词，改成 2D anime、cel-shaded、flat color、clean lineart。\n'
+          + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld 等实拍词。\n'
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
           + '<Subject N> 编号沿用全片编号；只拍这一段的事。'
-          + (prevTail ? '\n\n上一段结尾状态（本段必须从这个画面/动作接上；不要重拍上一段已经发生的事，也不要重复它的台词）：\n' + prevTail : '');
+          + (prevTail ? '\n\n上一段结尾状态（能接上就接上；不要重拍上一段已经发生的事）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
-        pgSet(30 + 70 * (i / plan.segs.length));
         let out = '';
-        try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
+        try { out = await callAI(SIX_SYS, user, 3000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
         if (b && !/<Picture\s*\d/i.test(b)) {
           try {
-            jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（补 Picture 引用）');
-            const retryUser = user + '\n\n注意：上一版一个 Picture 编号都没写。本次必须在 subject_definitions 里给每个角色/场景标注参考图编号（<Subject 1> is … in <Picture 1>、<Subject 2> is … in <Picture 2>），并在 detailed_description 首次出现时写 the shot begins from <Picture 1> 之类。';
-            const out2 = await callAI(SIX_SYS, retryUser, 4000);
+            const retryUser = user + '\n\n注意：上一版一个 Picture 编号都没写。本次必须在 subject_definitions 里给角色/场景标注 <Picture N>。';
+            const out2 = await callAI(SIX_SYS, retryUser, 3000);
             const b2 = extractPrompt(out2) || String(out2 || '').trim();
             if (b2 && /<Picture\s*\d/i.test(b2)) b = b2;
           } catch (e) { LOG('picture retry fail', i, e); }
         }
-        if (b) {
-          const cast = parseCastLine(b);
-          if (cast) { b = b.replace(cast.raw, '').trim(); }
-          let nb = normalizeBlock(b);
-          nb = ensureAudioTags(nb, cast);
-          nb = applyVideoStyle(nb);
-          blocks.push(nb); lastBlock = nb;
-          if (cast) {
-            const idx2 = blocks.length - 1;
-            SEGCAST[idx2] = cast;
-            const files = [];
-            cast.cast.forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
-            const sf = resolveScene(cast.scene);
-            if (sf) files.push(sf);
-            if (files.length) SEGIMG[idx2] = files;
-          }
+        if (!b) return;
+        const cast = parseCastLine(b);
+        if (cast) { b = b.replace(cast.raw, '').trim(); }
+        let nb = normalizeBlock(b);
+        nb = ensureAudioTags(nb, cast);
+        nb = applyVideoStyle(nb);
+        blocksArr[i] = nb;
+        if (cast) {
+          SEGCAST[i] = cast;
+          const files = [];
+          cast.cast.forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
+          const sf = resolveScene(cast.scene);
+          if (sf) files.push(sf);
+          if (files.length) SEGIMG[i] = files;
         }
-        await new Promise(r => setTimeout(r, 200));
       }
+
+      async function genWorker() {
+        while (true) {
+          const i = nextI++;
+          if (i >= plan.segs.length) return;
+          try { await genOne(i); } catch (e) { LOG('gen fail', i, e); }
+          doneI++;
+          pgSet(30 + 70 * (doneI / plan.segs.length));
+          status('run', '已写 ' + doneI + '/' + plan.segs.length + ' 段（并发 ' + GENCONC + '）…');
+        }
+      }
+
+      const workers = [];
+      for (let k = 0; k < Math.min(GENCONC, plan.segs.length); k++) workers.push(genWorker());
+      await Promise.all(workers);
+      const blocks = blocksArr.filter(Boolean);
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
-      $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\[\/H3\]\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
-            saveBlocks(CURMESID, $('#h3v-prompt').value);
-      try { await qcFix(true); } catch (_) {}
+      $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
+      if (S.autoQc) { try { await qcFix(true); } catch (_) {} }
       refreshBlockList();
       pgSet(100);
       status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
