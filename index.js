@@ -1699,11 +1699,39 @@
     return { base: base, path: path, pin: pin, url: base + path };
   }
 
-  async function agentHttp(url, bodyStr, pin) {
+  async function agentHttp(url, bodyStr, pinOverride) {
+    const cfg = agentCfg();
     const headers = { 'Content-Type': 'application/json' };
+    const pin = (pinOverride === undefined) ? cfg.pin : pinOverride;
     if (pin) { headers['Authorization'] = 'Bearer ' + pin; headers['X-Pin'] = pin; }
+    if (S.agentToken) headers['Authorization'] = 'Bearer ' + S.agentToken;
+    if (S.agentCookie) headers['Cookie'] = S.agentCookie;
     const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: bodyStr });
-    return r; // {ok,status,body|error}
+    return r;
+  }
+
+  async function agentLogin() {
+    const cfg = agentCfg();
+    if (!cfg.pin) return null;
+    const cands = ['/api/auth', '/api/login', '/api/pin', '/api/pocket/auth', '/api/session', '/auth', '/login'];
+    for (let k = 0; k < cands.length; k++) {
+      const url = cfg.base + cands[k];
+      let r = null;
+      try {
+        r = await agentHttp(url, JSON.stringify({ pin: cfg.pin, password: cfg.pin, code: cfg.pin, token: cfg.pin }), '');
+      } catch (_) { continue; }
+      if (!r || !r.ok) continue;
+      let j = null;
+      try { j = JSON.parse(r.body); } catch (_) {}
+      const tok = j && (j.token || j.accessToken || j.access_token || (j.data && (j.data.token || j.data.accessToken)));
+      const hdrs = r.headers || {};
+      const ckRaw = hdrs['Set-Cookie'] || hdrs['set-cookie'] || '';
+      const ck = ckRaw ? String(ckRaw).split(' | ')[0].split(';')[0] : '';
+      if (tok) S.agentToken = tok;
+      if (ck) S.agentCookie = ck;
+      if (tok || ck) { saveS(); return { path: cands[k], token: !!tok, cookie: !!ck }; }
+    }
+    return null;
   }
 
   function pickAgentText(json) {
@@ -1734,7 +1762,12 @@
       stream: false,
     };
     jobLabel('调本机 Agent');
-    const r = await agentHttp(cfg.url, JSON.stringify(body), cfg.pin);
+    let r = await agentHttp(cfg.url, JSON.stringify(body));
+    if (r && r.status === 401) {
+      jobLabel('Agent 需要登录，先换 token');
+      const ok = await agentLogin();
+      if (ok) r = await agentHttp(cfg.url, JSON.stringify(body));
+    }
     if (!r || !r.ok) {
       const detail = r && (r.error || (r.status + ' ' + String(r.body || '').slice(0, 140)));
       throw new Error('Agent 调用失败：' + detail);
@@ -1748,6 +1781,8 @@
 
   async function agentProbe() {
     const cfg = agentCfg();
+    let loginInfo = '（未登录）';
+    try { const lg = await agentLogin(); if (lg) loginInfo = '登录成功：' + lg.path + (lg.token ? ' token' : '') + (lg.cookie ? ' cookie' : ''); } catch (e) { loginInfo = '登录失败：' + e.message; }
     const cands = ['/api/chat', '/api/pocket/chat', '/api/agent/chat', '/api/agent', '/api/send', '/api/message',
       '/v1/chat/completions', '/chat/completions', '/api/completions', '/api/session', '/api/ping', '/'];
     const lines = [];
@@ -1762,7 +1797,7 @@
     }
     const box = $('#h3v-agentState');
     if (box) box.textContent = '探测完成，见状态区';
-    status('ok', 'Agent 探测：\n' + lines.join('\n'));
+    status('ok', 'Agent 探测：' + loginInfo + '\n' + lines.join('\n'));
   }
 
   function callAI(sys, user, len) {
