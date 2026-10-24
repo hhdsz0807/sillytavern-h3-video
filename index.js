@@ -71,14 +71,16 @@
           <button id="h3v-diag">诊断</button>
         </div>
 
-        <div class="row"><label>四视图</label><span class="hint">顺序 = &lt;Picture 1..N&gt;</span></div>
-        <div id="h3v-views"></div>
+        <div class="row" style="display:none"><label>四视图</label></div>
+        <div id="h3v-views" style="display:none"></div>
 
-        <div class="row"><label>场景图</label>
-          <select id="h3v-scene" style="flex:1"></select>
-          <button id="h3v-sceneUp">传</button>
+        <div class="row"><label>角色库</label>
+          <button id="h3v-charUp" style="flex:none">+ 上传角色图</button>
+          <span class="hint" id="h3v-charHint">每张填个中文名；分段提示词只会从这些名字里选</span>
         </div>
-        <img id="h3v-scenePv" class="pv" alt="">
+        <div id="h3v-charList"></div>
+
+        <div style="display:none"><select id="h3v-scene"></select></div>
 
         <div class="row">
           <label style="min-width:auto"><input type="checkbox" id="h3v-inject" ${S.inject ? 'checked' : ''}> 自动要求模型输出六段</label>
@@ -116,11 +118,11 @@
         </div>
         <textarea id="h3v-sceneList" rows="4" placeholder="每行一个场景：场景名|英文出图提示词（会自动补 no people / clean background）"></textarea>
         <div class="row"><label>场景库</label>
-          <select id="h3v-sceneLib" style="flex:1"></select>
-          <button id="h3v-sceneUse" style="flex:none">设为场景图</button>
-          <button id="h3v-sceneDel" style="flex:none">删</button>
+          <button id="h3v-sceneUp2" style="flex:none">+ 上传场景图</button>
+          <span class="hint">可改名、删；名字就是 AI 能选的场景名</span>
         </div>
-        <img id="h3v-sceneLibPv" class="pv" alt="">
+        <div class="row" style="display:none"><select id="h3v-sceneLib"></select><img id="h3v-sceneLibPv" class="pv" alt=""></div>
+        <div id="h3v-sceneListBox"></div>
 
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
@@ -267,6 +269,10 @@
       $('#h3v-sceneConc').value = String(S.sceneConc || 3);
       $('#h3v-sceneConc').onchange = function () { S.sceneConc = Number($('#h3v-sceneConc').value) || 3; saveS(); };
     }
+    if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
+    if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
+    renderCharList();
+    renderSceneListBox();
     if ($('#h3v-scenePlan')) $('#h3v-scenePlan').onclick = scenePlan;
     if ($('#h3v-sceneGen')) $('#h3v-sceneGen').onclick = sceneGen;
     if ($('#h3v-sceneLib')) {
@@ -1187,7 +1193,7 @@
 
     jobEnd();
     btn.disabled = false;
-    refreshSceneLib();
+    renderSceneListBox();
     status(ok ? 'ok' : 'err', '场景完成 ' + ok + '/' + list.length + '（画风：' + styleKey + '），已存进场景库');
   }
 
@@ -1207,6 +1213,7 @@
   }
 
   function refreshSceneLib() {
+    renderSceneListBox();
     const sel = $('#h3v-sceneLib');
     if (!sel) return;
     const cur = sel.value;
@@ -1279,6 +1286,142 @@
       if (mm) scene = mm[1].trim();
     }
     return { cast: cast, scene: scene, raw: m[0] };
+  }
+
+  /* ---------- 角色库 / 场景库界面 ---------- */
+  function thumbUrl(file) {
+    return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
+  }
+
+  function renderCharList() {
+    const box = $('#h3v-charList');
+    if (!box) return;
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+      const file = sel ? sel.value : '';
+      if (!file) continue;
+      html += '<div class="row">' +
+        '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(file) + '">' +
+        '<input data-cn="' + i + '" value="' + esc(S.charNames[i] || '') + '" placeholder="角色名（中文）" style="flex:1">' +
+        '<button data-cdel="' + i + '" style="flex:none">删</button></div>';
+    }
+    box.innerHTML = html || '<div class="hint">还没有角色图，点上面「+ 上传角色图」</div>';
+    box.querySelectorAll('input[data-cn]').forEach(function (el) {
+      const i = Number(el.dataset.cn);
+      el.oninput = function () { S.charNames[i] = el.value.trim(); saveS(); };
+    });
+    box.querySelectorAll('button[data-cdel]').forEach(function (el) {
+      const i = Number(el.dataset.cdel);
+      el.onclick = function () {
+        const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+        if (sel) sel.value = '';
+        S.charNames[i] = '';
+        saveS();
+        renderCharList();
+      };
+    });
+  }
+
+  function renderSceneListBox() {
+    const box = $('#h3v-sceneListBox');
+    if (!box) return;
+    if (!SCENES.length) { box.innerHTML = '<div class="hint">场景库还是空的：先用上面「按正文出场景提示词 → 生成全部场景」，或点「+ 上传场景图」</div>'; return; }
+    let html = '';
+    SCENES.forEach(function (s, i) {
+      html += '<div class="row">' +
+        (s.file ? '<img class="pv" style="display:block;width:64px;height:40px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(s.file) + '">' : '') +
+        '<input data-sn="' + i + '" value="' + esc(s.name || '') + '" placeholder="场景名（中文）" style="flex:1">' +
+        '<button data-suse="' + i + '" style="flex:none">设为默认</button>' +
+        '<button data-sdel="' + i + '" style="flex:none">删</button></div>';
+    });
+    box.innerHTML = html;
+    box.querySelectorAll('input[data-sn]').forEach(function (el) {
+      const i = Number(el.dataset.sn);
+      el.oninput = function () { SCENES[i].name = el.value.trim(); saveScenes(); };
+    });
+    box.querySelectorAll('button[data-suse]').forEach(function (el) {
+      const i = Number(el.dataset.suse);
+      el.onclick = function () {
+        const s = SCENES[i];
+        if (!s || !s.file) return;
+        S.scene = s.file; saveS();
+        const hidden = $('#h3v-scene');
+        if (hidden) {
+          if (!Array.from(hidden.options).some(function (o) { return o.value === s.file; })) {
+            const o = document.createElement('option'); o.value = s.file; o.textContent = s.file; hidden.appendChild(o);
+          }
+          hidden.value = s.file;
+        }
+        status('ok', '默认场景设为「' + s.name + '」');
+      };
+    });
+    box.querySelectorAll('button[data-sdel]').forEach(function (el) {
+      const i = Number(el.dataset.sdel);
+      el.onclick = function () {
+        if (!confirm('从场景库删掉「' + (SCENES[i] && SCENES[i].name) + '」？（不会删文件）')) return;
+        SCENES.splice(i, 1); saveScenes(); renderSceneListBox();
+      };
+    });
+  }
+
+  function uploadOne(f) {
+    return fetch(api('/api/upload?name=' + encodeURIComponent(f.name) + '&kind=image'), {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f,
+    }).then(function (r) { return r.json(); });
+  }
+
+  function uploadChar() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+    inp.onchange = async function () {
+      const files = Array.from(inp.files || []);
+      if (!files.length) return;
+      for (let k = 0; k < files.length; k++) {
+        const f = files[k];
+        try {
+          status('run', '上传角色图 ' + (k + 1) + '/' + files.length + '…');
+          const j = await uploadOne(f);
+          if (j.error) throw new Error(j.error);
+          await loadMeta();
+          let slot = -1;
+          for (let i = 0; i < 6; i++) {
+            const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+            if (sel && !sel.value) { slot = i; break; }
+          }
+          if (slot < 0) { status('err', '角色库最多 6 张'); break; }
+          const sel = document.querySelector('#h3v-views select[data-v="' + slot + '"]');
+          sel.value = j.name;
+          if (!Array.isArray(S.charNames)) S.charNames = ['', '', '', '', '', ''];
+          if (!S.charNames[slot]) S.charNames[slot] = f.name.replace(/\.[^.]+$/, '');
+          saveS();
+          renderCharList();
+        } catch (e) { status('err', '上传失败：' + e.message); }
+      }
+      status('ok', '角色库已更新（记得填中文名）');
+      renderCharList();
+    };
+    inp.click();
+  }
+
+  function uploadScene() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+    inp.onchange = async function () {
+      const files = Array.from(inp.files || []);
+      for (let k = 0; k < files.length; k++) {
+        try {
+          status('run', '上传场景图 ' + (k + 1) + '/' + files.length + '…');
+          const j = await uploadOne(files[k]);
+          if (j.error) throw new Error(j.error);
+          SCENES.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), prompt: '', style: 'upload', file: j.name, ts: Date.now() });
+          saveScenes();
+          renderSceneListBox();
+        } catch (e) { status('err', '上传失败：' + e.message); }
+      }
+      status('ok', '场景库已更新');
+    };
+    inp.click();
   }
 
   async function genSix() {
