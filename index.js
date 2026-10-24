@@ -222,7 +222,7 @@
 
     wrap.querySelectorAll('select[data-v]').forEach(sel => { sel.onchange = () => { S.views[Number(sel.dataset.v)] = sel.value; saveS(); }; });
     wrap.querySelectorAll('button[data-up]').forEach(btn => { btn.onclick = () => pickAndUpload(Number(btn.dataset.up)); });
-    $('#h3v-sceneUp').onclick = () => pickAndUpload(-1);
+    if ($('#h3v-sceneUp')) $('#h3v-sceneUp').onclick = () => pickAndUpload(-1);
     $('#h3v-scene').onchange = () => { S.scene = $('#h3v-scene').value; saveS(); updatePreviews(); };
     wrap.querySelectorAll('select[data-v]').forEach(sel => {
       sel.addEventListener('change', updatePreviews);
