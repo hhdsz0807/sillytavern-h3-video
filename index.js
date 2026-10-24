@@ -154,7 +154,18 @@
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
-        <div class="row"><label>配置</label>
+                <div class="row"><label>H3账号</label>
+          <button id="h3v-accExport" style="flex:none">导出账号</button>
+          <button id="h3v-accImport" style="flex:none">导入账号</button>
+          <span class="hint" id="h3v-accState">从 H3工作台 账号页导出的 JSON 可以直接贴进来</span>
+        </div>
+        <div id="h3v-accBox" style="display:none">
+          <textarea id="h3v-accJson" rows="4" placeholder='把导出的 JSON 粘在这里：{"accounts":[...]}'></textarea>
+          <div class="row"><button id="h3v-accDo" style="flex:none">确认导入</button>
+            <label style="min-width:auto"><input type="checkbox" id="h3v-accReplace"> 覆盖现有账号</label></div>
+        </div>
+
+<div class="row"><label>配置</label>
           <select id="h3v-apiProf" style="flex:1;max-width:280px"></select>
           <button id="h3v-apiSave" style="flex:none">存为新配置</button>
           <button id="h3v-apiDel" style="flex:none">删</button>
@@ -255,6 +266,9 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
+    if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
+    if ($('#h3v-accDo')) $('#h3v-accDo').onclick = accImportDo;
     if ($('#h3v-apiProf')) {
       renderApiProfiles();
       $('#h3v-apiProf').onchange = function () { if ($('#h3v-apiProf').value !== '') applyProfile($('#h3v-apiProf').value); };
@@ -344,6 +358,10 @@
     if ($('#h3v-sceneStyle')) {
       $('#h3v-sceneStyle').value = S.sceneStyle || 'anime';
       $('#h3v-sceneStyle').onchange = function () { S.sceneStyle = $('#h3v-sceneStyle').value; saveS(); };
+    }
+    if ($('#h3v-sceneCloud')) {
+      $('#h3v-sceneCloud').checked = !!S.sceneCloud;
+      $('#h3v-sceneCloud').onchange = function () { S.sceneCloud = $('#h3v-sceneCloud').checked; saveS(); };
     }
     if ($('#h3v-sceneConc')) {
       $('#h3v-sceneConc').value = String(S.sceneConc || 3);
@@ -1513,6 +1531,66 @@
     } catch (e) { status('err', '提取失败：' + e.message); }
   }
 
+  /* ---------- 云端直连（Krea2 出图，不经过手机 APK） ---------- */
+  const RH_BASE = 'https://www.runninghub.ai';
+  const WF_K2_T2I = "{\r\n \"53\": {\r\n  \"class_type\": \"CLIPTextEncode\",\r\n  \"inputs\": {\r\n   \"clip\": [\r\n    \"36\",\r\n    0\r\n   ],\r\n   \"text\": [\r\n    \"52\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"31\": {\r\n  \"class_type\": \"ConditioningZeroOut\",\r\n  \"inputs\": {\r\n   \"conditioning\": [\r\n    \"53\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"30\": {\r\n  \"class_type\": \"VAEDecode\",\r\n  \"inputs\": {\r\n   \"samples\": [\r\n    \"28\",\r\n    0\r\n   ],\r\n   \"vae\": [\r\n    \"34\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"29\": {\r\n  \"class_type\": \"EmptyLatentImage\",\r\n  \"inputs\": {\r\n   \"width\": [\r\n    \"55\",\r\n    0\r\n   ],\r\n   \"height\": [\r\n    \"55\",\r\n    1\r\n   ],\r\n   \"batch_size\": 1\r\n  }\r\n },\r\n \"27\": {\r\n  \"class_type\": \"SaveImage\",\r\n  \"inputs\": {\r\n   \"images\": [\r\n    \"30\",\r\n    0\r\n   ],\r\n   \"filename_prefix\": \"Krea2-%date:yyyyMMddhhmmss%\"\r\n  }\r\n },\r\n \"35\": {\r\n  \"class_type\": \"Seed (rgthree)\",\r\n  \"inputs\": {\r\n   \"seed\": 685212704886219\r\n  }\r\n },\r\n \"28\": {\r\n  \"class_type\": \"KSampler\",\r\n  \"inputs\": {\r\n   \"model\": [\r\n    \"37\",\r\n    0\r\n   ],\r\n   \"positive\": [\r\n    \"53\",\r\n    0\r\n   ],\r\n   \"negative\": [\r\n    \"31\",\r\n    0\r\n   ],\r\n   \"latent_image\": [\r\n    \"29\",\r\n    0\r\n   ],\r\n   \"seed\": [\r\n    \"35\",\r\n    0\r\n   ],\r\n   \"steps\": 8,\r\n   \"cfg\": 1,\r\n   \"sampler_name\": \"euler\",\r\n   \"scheduler\": \"simple\",\r\n   \"denoise\": 1\r\n  }\r\n },\r\n \"36\": {\r\n  \"class_type\": \"CLIPLoader\",\r\n  \"inputs\": {\r\n   \"clip_name\": \"qwen3vl_4b_fp8_scaled.safetensors\",\r\n   \"type\": \"krea2\",\r\n   \"device\": \"default\"\r\n  }\r\n },\r\n \"34\": {\r\n  \"class_type\": \"VAELoader\",\r\n  \"inputs\": {\r\n   \"vae_name\": \"qwen_image_vae.safetensors\"\r\n  }\r\n },\r\n \"55\": {\r\n  \"class_type\": \"ResolutionSelector\",\r\n  \"inputs\": {\r\n   \"aspect_ratio\": \"9:16 (Portrait Widescreen)\",\r\n   \"megapixels\": 1.2,\r\n   \"multiple\": 32\r\n  }\r\n },\r\n \"37\": {\r\n  \"class_type\": \"UNETLoader\",\r\n  \"inputs\": {\r\n   \"unet_name\": \"krea2_turbo_fp8.safetensors\",\r\n   \"weight_dtype\": \"default\"\r\n  }\r\n },\r\n \"50\": {\r\n  \"class_type\": \"PrimitiveStringMultiline\",\r\n  \"inputs\": {\r\n   \"value\": \"一位黑色长发的年轻亚洲女子站在阳光斑驳的森林中，头发自然披散在肩头并编成一条松散的长辫，用紫色发圈固定。她的皮肤白皙，嘴唇微张，笑容甜美，表情温柔。她身穿一袭白色露肩上衣，领口和袖口饰有精致蕾丝花边，胸前系着蝴蝶结，下摆微微收紧露出紫色腰带；脖子上戴着一条金色细链，坠着一枚椭圆形紫色宝石吊坠。她的右手轻轻捏住一朵紫色风铃草，花瓣舒展，花茎细长带有绿色叶片。柔和的金色阳光从左侧树叶间洒落，整体画面呈现温暖。\"\r\n  }\r\n },\r\n \"52\": {\r\n  \"class_type\": \"easy stylesSelector\",\r\n  \"inputs\": {\r\n   \"positive\": [\r\n    \"50\",\r\n    0\r\n   ],\r\n   \"styles\": \"fooocus_styles\"\r\n  }\r\n }\r\n}";
+
+  function cloudAccounts() {
+    if (!Array.isArray(S.cloudAccounts)) S.cloudAccounts = [];
+    return S.cloudAccounts;
+  }
+  function cloudAcc() {
+    const list = cloudAccounts();
+    if (!list.length) return null;
+    const i = Math.min(Number(S.cloudAccIdx || 0), list.length - 1);
+    return list[i];
+  }
+
+  async function rhPost(path, body, withKey) {
+    const acc = cloudAcc();
+    const payload = Object.assign({}, body);
+    if (withKey !== false && acc && acc.apiKey) payload.apiKey = acc.apiKey;
+    const r = await fetch(RH_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch (_) { throw new Error(path + ' 返回非 JSON：' + txt.slice(0, 120)); }
+  }
+
+  async function cloudKrea2(prompt, aspect, mp) {
+    const acc = cloudAcc();
+    if (!acc || !acc.apiKey) throw new Error('云端直连需要先导入带 API Key 的账号');
+    const wf = JSON.parse(WF_K2_T2I);
+    if (wf['13']) wf['13'].inputs.text = prompt;
+    if (wf['15']) {
+      wf['15'].inputs.aspect_ratio = aspect || '16:9 (Widescreen)';
+      wf['15'].inputs.megapixels = mp || 1.5;
+    }
+    if (wf['17']) wf['17'].inputs.seed = Math.floor(Math.random() * 1e12);
+    const c = await rhPost('/task/openapi/create', {
+      workflowId: '2112032226968285186',
+      workflow: JSON.stringify(wf),
+    });
+    const tid = c && c.data && c.data.taskId;
+    if (!tid) throw new Error('提交失败：' + JSON.stringify(c).slice(0, 160));
+    const t0 = Date.now();
+    while (Date.now() - t0 < 600000) {
+      await new Promise(function (r) { setTimeout(r, 5000); });
+      const s = await rhPost('/task/openapi/status', { taskId: tid });
+      const st = s && s.data;
+      if (st === 'SUCCESS' || st === '3') break;
+      if (st === 'FAILED' || st === '2') throw new Error('云端任务失败');
+      jobLabel('云端出图 ' + Math.round((Date.now() - t0) / 1000) + 's');
+    }
+    const o = await rhPost('/task/openapi/outputs', { taskId: tid });
+    const arr = (o && o.data) || [];
+    const hit = arr.find(function (x) { return /\.(png|jpe?g|webp)(\?|$)/i.test(x.fileUrl || ''); });
+    if (!hit) throw new Error('任务结束但没拿到图片');
+    return hit.fileUrl;
+  }
+
   async function sceneGen() {
     const raw = $('#h3v-sceneList').value.trim();
     if (!raw) { status('err', '先点「按正文出场景提示词」或手写'); return; }
@@ -1555,9 +1633,15 @@
         jobLabel('场景 ' + (i + 1) + '/' + list.length + '：' + s.name);
         pgSet(100 * (done / list.length));
         try {
-          const j = await submitOne(s, 8);
-          const file = await waitKrea2(j.taskId);
-          const blob = await (await fetch(api(file))).blob();
+          let file;
+          if (S.sceneCloud) {
+            file = await cloudKrea2(styleText + ', ' + s.prompt + ', no people, clean background, empty scene', '16:9 (Widescreen)', 1.5);
+          } else {
+            const j = await submitOne(s, 8);
+            file = await waitKrea2(j.taskId);
+          }
+          const fullUrl = /^https?:/i.test(file) ? file : api(file);
+          const blob = await (await fetch(fullUrl)).blob();
           const fname = 'scene_' + Date.now() + '_' + i + '.png';
           const up = await fetch(api('/api/upload?name=' + encodeURIComponent(fname) + '&kind=image'), {
             method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
@@ -1716,6 +1800,52 @@
   }
 
   /* ---------- 自定义 API 多配置 ---------- */
+  /* ---------- H3 账号导出/导入 ---------- */
+  async function accExport() {
+    try {
+      const j = await jget('/api/accounts/export');
+      if (!j || !Array.isArray(j.accounts)) throw new Error('导出失败');
+      const text = JSON.stringify(j);
+      try { await navigator.clipboard.writeText(text); } catch (_) {}
+      const blob = new Blob([text], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'h3-accounts-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+      if ($('#h3v-accState')) $('#h3v-accState').textContent = '已导出 ' + j.accounts.length + ' 个账号（已复制到剪贴板）';
+      status('ok', '账号已导出（' + j.accounts.length + ' 个），文件也下载了');
+    } catch (e) { status('err', '导出失败：' + e.message); }
+  }
+
+  async function accImport() {
+    const box = $('#h3v-accBox');
+    if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  }
+
+  async function accImportDo() {
+    const raw = ($('#h3v-accJson') || {}).value || '';
+    if (!raw.trim()) { status('err', '先粘贴账号 JSON'); return; }
+    let j = null;
+    try { j = JSON.parse(raw); } catch (e) { status('err', 'JSON 解析失败：' + e.message); return; }
+    const list = Array.isArray(j) ? j : (j.accounts || []);
+    if (!list.length) { status('err', '这份数据里没有账号'); return; }
+    try {
+      const r = await jpost('/api/accounts/import', {
+        accounts: list,
+        mode: ($('#h3v-accReplace') && $('#h3v-accReplace').checked) ? 'replace' : 'merge',
+      });
+      if (!r.ok) throw new Error(r.error || '导入失败');
+      S.cloudAccounts = list.slice();
+      if (S.cloudAccIdx == null) S.cloudAccIdx = 0;
+      saveS();
+      $('#h3v-accBox').style.display = 'none';
+      $('#h3v-accJson').value = '';
+      status('ok', '导入完成：新增 ' + r.added + '，跳过重复 ' + r.skipped + '，现在共 ' + r.total + ' 个账号');
+      if ($('#h3v-accState')) $('#h3v-accState').textContent = '共 ' + r.total + ' 个账号';
+    } catch (e) { status('err', '导入失败：' + e.message); }
+  }
+
   function apiProfiles() {
     if (!Array.isArray(S.apiProfiles)) S.apiProfiles = [];
     return S.apiProfiles;
