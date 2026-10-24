@@ -1247,25 +1247,24 @@
     let s = String(block || '');
     const key = S.videoStyle || 'anime';
     const line = VIDEO_STYLE_LINE[key] || VIDEO_STYLE_LINE.anime;
-    // 去掉旧的风格首句（避免自相矛盾）
-    s = s.replace(/(detailed_description:\s*\n)(\s*)(Anime-style 2D|Live-action|Photorealistic|Cinematic|Watercolor)[^\n]*\n/gi, '$1$2');
+
+    // 1) 先把旧的风格行整行删掉（否则替换规则会把风格行自己也改坏）
+    s = s.replace(/^[ \t]*Visual style:.*$/gim, '');
+    // 2) 再替换正文里的实拍词
     if (key === 'anime' || key === 'watercolor') {
       LIVE_WORDS.forEach(function (pair) { s = s.replace(pair[0], pair[1]); });
-      // 修掉替换造成的粘连：steady 2D animationcalm → steady calm
-      s = s.replace(/steady 2D animation(?=[a-zA-Z])/gi, 'steady ');
-      s = s.replace(/steady 2D animation\b/gi, 'steady');
       s = s.replace(/\b(\w+)\s+\1\b/gi, '$1');
       s = s.replace(/[ \t]{2,}/g, ' ');
     }
-    // 在 detailed_description 下插入风格行
+    // 3) 插回干净的风格行
     const lines = s.split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (/^\s*detailed_description\s*:/i.test(lines[i])) {
-        if (!/Visual style:/i.test(lines[i + 1] || '')) lines.splice(i + 1, 0, line);
+        lines.splice(i + 1, 0, line);
         break;
       }
     }
-    return lines.join('\n');
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n');
   }
 
   function blockTail(b) {
