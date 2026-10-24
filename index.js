@@ -770,7 +770,9 @@
           if (j.state === 'done') {
             clearInterval(timer);
             if (j.status === 'error') return reject(new Error(j.message || '云端报错'));
-            resolve({ items: (j.items || []).filter(x => x.isVideo), coins: j.coins || 0, secs: el });
+            const all = (j.items || j.videos || j.files || []);
+        const vids = all.filter(function (x) { return x && (x.isVideo || /\.(mp4|webm|mov)(\?|$)/i.test(x.url || x.filename || '')); });
+        resolve({ items: vids, all: all, coins: j.coins || 0, secs: el });
           } else {
             status('run', (label ? label + ' · ' : '') + (j.state === 'running' ? '云端正在跑' : '排队中')
               + '… ' + Math.floor(el / 60) + ' 分 ' + (el % 60) + ' 秒');
@@ -984,7 +986,9 @@
     };
   }
   function showVideos(r, label) {
-    (r.items || []).forEach(function (v) {
+    const list = (r.items && r.items.length) ? r.items : (r.all || []);
+    if (!list.length) status('err', '拿到结果但没有视频条目：' + JSON.stringify(r).slice(0, 160));
+    list.forEach(function (v) {
       VIDEOS.push({ name: v.filename || '', url: v.url, label: label || '' });
     });
     renderOut();
@@ -1136,8 +1140,8 @@
         const sec = blockSeconds(blocks[i]);
         jobLabel('批量 · 第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
         try {
-          let id = null, tries = 8;
-          while (tries-- > 0) {
+          let id = null, tries = 0;
+          while (tries < 12) {
             try {
               id = await submitBlock(blocks[i], sec, SEGCFG[i], SEGIMG[i]);
               break;
@@ -1146,7 +1150,7 @@
               if (/并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m) && !STOP_ALL && tries < 12) {
                 tries = (tries || 0) + 1;
                 const wait = Math.min(30000, 4000 * tries);
-                status('run', '第 ' + (i + 1) + ' 条并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
+                status('run', '第 ' + (i + 1) + ' 条并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + '/12 次）…');
                 await sleep(wait);
                 continue;
               }
