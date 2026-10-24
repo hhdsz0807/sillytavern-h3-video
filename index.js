@@ -1447,7 +1447,7 @@
       if (pick && Array.isArray(pick.order)) order = pick.order;
 
       const parts = [];
-      const push = (p) => { if (p && p.content && String(p.content).trim()) parts.push('[' + (p.name || p.identifier) + ']\n' + String(p.content).trim()); };
+      const push = (p) => { if (p && p.content && String(p.content).trim()) parts.push(String(p.content).trim()); };
       if (order.length) {
         order.forEach(o => { if (!o || o.enabled === false) return; const p = byId[o.identifier]; if (p) push(p); });
       } else {
@@ -1468,7 +1468,7 @@
     if (S.usePresetPrompt === false) return [sys, user];
     const extra = await getPresetPrompts();
     if (!extra) return [sys, user];
-    return [sys + '\n\n【酒馆对话补全预设里的提示词（风格与规则参考，冲突时以上面的六段规范为准）】\n' + extra, user];
+    return [extra + '\n\n' + sys, user];
   }
   function callAI(sys, user, len) {
     jobLabel(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
