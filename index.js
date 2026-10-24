@@ -1639,7 +1639,7 @@
     '',
     '必须修的问题：',
     '1) 六段名必须齐全且带冒号：subject_definitions: / summary: / retention_analysis: / detailed_description: / overall_soundscape: / non_diegetic_music:',
-    '2) 六段必须全英文；中文只允许出现在 <d>[Chinese] …</d> 台词里。混进英文描述的中文要译成英文（人名地名可保留原字或拼音，但全片必须统一）。',
+    '2) 六段用英文写；但人名必须原样照抄素材清单里的中文名（如 白井玄一），严禁音译成罗马字（Shiroi / Shirai Genichi / Hakui 这类一律改回中文）；除人名外的中文描述必须译成英文；中文台词只允许在 <d>[Chinese] …</d> 里。',
     '3) [Shot 1] 不允许出现任何时间戳；从第 2 镜起才写 [Shot N] At MM:SS.mmm, …',
     '4) <Subject N> 从 1 开始连续编号，不许跳号；<Picture N> 的编号与 subject_definitions 里的引用一致，且顺序＝本段角色顺序、场景永远最后。',
     '5) 若本段用到音色参考，写成 <Audio N> is the voice-timbre reference for <Subject N>.（最多 3 条）；没有音色就不要编造。',
