@@ -1234,13 +1234,14 @@
     watercolor: 'Visual style: watercolor illustration animation, soft washes, paper texture, hand-painted look, no photoreal detail.',
   };
   const LIVE_WORDS = [
-    [/\bLive-action\b/gi, 'Anime-style 2D'],
-    [/\blive-action\b/gi, '2D anime'],
+    [/\bnaturalistic live[- ]action\b/gi, '2D anime style'],
+    [/\blive[- ]action\b/gi, '2D anime'],
     [/\bphotorealistic\b/gi, '2D cel-shaded'],
     [/\bphotograph(y|ic)\b/gi, 'anime illustration'],
     [/\bfilm grain\b/gi, 'clean flat shading'],
-    [/\bhandheld(-| )?(style|adjacent)?\b/gi, 'steady 2D animation'],
+    [/\bhandheld[- ]?[a-z]*/gi, 'steady'],
   ];
+
 
   function applyVideoStyle(block) {
     let s = String(block || '');
@@ -1250,6 +1251,11 @@
     s = s.replace(/(detailed_description:\s*\n)(\s*)(Anime-style 2D|Live-action|Photorealistic|Cinematic|Watercolor)[^\n]*\n/gi, '$1$2');
     if (key === 'anime' || key === 'watercolor') {
       LIVE_WORDS.forEach(function (pair) { s = s.replace(pair[0], pair[1]); });
+      // 修掉替换造成的粘连：steady 2D animationcalm → steady calm
+      s = s.replace(/steady 2D animation(?=[a-zA-Z])/gi, 'steady ');
+      s = s.replace(/steady 2D animation\b/gi, 'steady');
+      s = s.replace(/\b(\w+)\s+\1\b/gi, '$1');
+      s = s.replace(/[ \t]{2,}/g, ' ');
     }
     // 在 detailed_description 下插入风格行
     const lines = s.split('\n');
