@@ -829,9 +829,77 @@
     } finally { URL.revokeObjectURL(u); }
   }
 
+  async function rhPostAs(acc, path, body) {
+    const payload = Object.assign({}, body);
+    if (acc && acc.apiKey) payload.apiKey = acc.apiKey;
+    const r = await fetch(RH_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const txt = await r.text();
+    let j = null;
+    try { j = JSON.parse(txt); } catch (_) { throw new Error(path + ' 返回非 JSON：' + txt.slice(0, 120)); }
+    if (j && j.code && j.code !== 0 && j.code !== '0') {
+      const e = new Error((j.msg || j.message || ('code ' + j.code)).toString().slice(0, 200));
+      e.rhCode = j.code;
+      throw e;
+    }
+    return j;
+  }
+
+  async function rhUploadAs(acc, name, blob) {
+    const fd = new FormData();
+    fd.append('apiKey', acc.apiKey);
+    fd.append('file', blob, name);
+    const r = await fetch(RH_BASE + '/task/openapi/upload', { method: 'POST', body: fd });
+    const txt = await r.text();
+    let j = null;
+    try { j = JSON.parse(txt); } catch (_) { throw new Error('上传返回非 JSON：' + txt.slice(0, 120)); }
+    const fn = (j.data && (j.data.fileName || j.data.name)) || j.fileName;
+    if (!fn) throw new Error('上传失败：' + txt.slice(0, 140));
+    return fn;
+  }
+
+  function cloudAccPool() {
+    const list = cloudAccounts();
+    return list.filter(function (a) { return a && a.apiKey; });
+  }
+
+  function isTransientErr(err) {
+    const m = String(err && err.message || '') + ' ' + String((err && err.rhCode) || '');
+    return /并发|busy|已满|rate|429|502|503|timeout|超时|Failed to fetch|network|no account|没有账号|未登录|unauthor|401|403/i.test(m);
+  }
+
   async function cloudVideo(opts) {
-    const acc = cloudAcc();
-    if (!acc || !acc.apiKey) throw new Error('云端直连需要先在「H3账号」里导入带 API Key 的账号');
+    const pool = cloudAccPool();
+    if (!pool.length) throw new Error('没有可用账号：导入的账号里没有 API Key（在「H3账号 → 导入账号」重新导入带 Key 的）');
+
+    let lastErr = null;
+    let start = Number(S.cloudAccIdx || 0) % pool.length;
+    for (let round = 0; round < 3; round++) {
+      for (let k = 0; k < pool.length; k++) {
+        const acc = pool[(start + k) % pool.length];
+        try {
+          const r = await cloudVideoOnce(acc, opts);
+          S.cloudAccIdx = (start + k) % pool.length;
+          saveS();
+          return r;
+        } catch (err) {
+          lastErr = err;
+          LOG('cloudVideo acc fail', acc.nick || acc.apiKey.slice(0, 6), err);
+          if (!isTransientErr(err)) throw err;
+          await new Promise(function (r) { setTimeout(r, 1200); });
+        }
+      }
+      status('run', '账号都忙，' + (4 * (round + 1)) + ' 秒后重试（第 ' + (round + 1) + '/3 轮）…');
+      await new Promise(function (r) { setTimeout(r, 4000 * (round + 1)); });
+      if (lastErr) start = (start + 1) % pool.length;
+    }
+    throw new Error('账号重试 3 轮仍失败：' + (lastErr && lastErr.message ? lastErr.message : '未知'));
+  }
+
+  async function cloudVideoOnce(acc, opts) {
     const wf = JSON.parse(WF_MM);
     if (wf['263']) wf['263'].inputs.text = opts.prompt;
     if (wf['252']) {
@@ -848,7 +916,7 @@
       if (imgs[i]) {
         jobLabel('云端上传图 ' + (i + 1) + '/' + imgs.length);
         const blob = await apkFileBlob(imgs[i]);
-        wf[id].inputs.image = await rhUpload(imgs[i], blob);
+        wf[id].inputs.image = await rhUploadAs(acc, imgs[i], blob);
       } else {
         wf[id].inputs.image = 'None';
       }
@@ -860,11 +928,11 @@
       if (auds[i]) {
         jobLabel('云端上传音频 ' + (i + 1) + '/' + auds.length);
         const blob = await apkFileBlob(auds[i]);
-        wf[id].inputs.audio = await rhUpload(auds[i], blob);
+        wf[id].inputs.audio = await rhUploadAs(acc, auds[i], blob);
       }
     }
 
-    const c = await rhPost('/task/openapi/create', {
+    const c = await rhPostAs(acc, '/task/openapi/create', {
       workflowId: '2112032226968285186',
       workflow: JSON.stringify(wf),
     });
@@ -872,31 +940,25 @@
     if (!tid) throw new Error('提交失败：' + JSON.stringify(c).slice(0, 180));
 
     const t0 = Date.now();
-    let st = 'RUNNING';
     while (Date.now() - t0 < 900000) {
       await new Promise(function (r) { setTimeout(r, 8000); });
-      const s = await rhPost('/task/openapi/status', { taskId: tid });
-      st = s && s.data;
+      const st = await rhPostAs(acc, '/task/openapi/status', { taskId: tid });
+      const v = st && st.data;
       jobLabel('云端跑片 ' + Math.floor((Date.now() - t0) / 60000) + ' 分 ' + (Math.round((Date.now() - t0) / 1000) % 60) + ' 秒');
-      if (st === 'SUCCESS' || st === '3') break;
-      if (st === 'FAILED' || st === '2') throw new Error('云端任务失败（' + tid + '）');
+      if (v === 'SUCCESS' || v === '3') break;
+      if (v === 'FAILED' || v === '2') throw new Error('云端任务失败（' + tid + '）');
     }
-    const o = await rhPost('/task/openapi/outputs', { taskId: tid });
+    const o = await rhPostAs(acc, '/task/openapi/outputs', { taskId: tid });
     const arr = (o && o.data) || [];
     const vids = arr.filter(function (x) { return /\.(mp4|webm|mov)(\?|$)/i.test(x.fileUrl || ''); });
     if (!vids.length) throw new Error('任务结束但没拿到视频');
     return {
-      items: vids.map(function (v) {
-        return { url: v.fileUrl, filename: (v.fileUrl.split('/').pop() || 'h3.mp4') };
-      }),
+      items: vids.map(function (v) { return { url: v.fileUrl, filename: (v.fileUrl.split('/').pop() || 'h3.mp4') }; }),
       coins: 0,
       secs: Math.round((Date.now() - t0) / 1000),
       taskId: tid,
     };
   }
-
-  const VIDEOS = [];
-
   function showVideos(r, label) {
     (r.items || []).forEach(function (v) {
       VIDEOS.push({ name: v.filename || '', url: v.url, label: label || '' });
@@ -1057,7 +1119,7 @@
               break;
             } catch (e) {
               const m = String(e && e.message || '');
-              if (tries > 0 && /并发|busy|已满|RUNNING/i.test(m)) { await sleep(5000); continue; }
+              if (tries > 0 && /并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m)) { await sleep(5000); continue; }
               throw e;
             }
           }
@@ -1980,7 +2042,7 @@
         });
       } catch (e) {
         const msg = String(e && e.message || '');
-        if (tries > 0 && /并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch/i.test(msg)) {
+        if (tries > 0 && /并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg)) {
           await new Promise(r => setTimeout(r, 4000));
           return submitOne(s, tries - 1);
         }
