@@ -49,7 +49,12 @@
       fab.textContent = '🎬';
       fab.style.cssText = 'position:fixed;right:14px;bottom:96px;z-index:2147482000;width:46px;height:46px;' +
         'border-radius:50%;background:#2f81f7;color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.35);';
-      fab.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPanel(lastMessageText()); });
+      fab.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const list = document.querySelectorAll('#chat .mes');
+        const last = list.length ? list[list.length - 1] : null;
+        openPanel(lastMessageText(), last ? (last.getAttribute('mesid') || last.dataset.mesid) : null);
+      });
       document.body.appendChild(fab);
     }
 
@@ -230,6 +235,7 @@
         clearTimeout(ensureUI._t);
         ensureUI._t = setTimeout(refreshBlockList, 400);
       });
+      $('#h3v-prompt').addEventListener('input', function () { saveBlocks(CURMESID, $('#h3v-prompt').value); });
     }
     dlg.addEventListener('close', () => { dlg.style.display = 'none'; });
     dlg.addEventListener('cancel', () => { dlg.style.display = 'none'; });
@@ -317,7 +323,7 @@
     fillSelects();
   }
 
-  function openPanel(text) {
+  function openPanel(text, mesid) {
     try {
       ensureUI();
       const d = $('#h3v-dlg');
@@ -329,10 +335,14 @@
       } else {
         d.setAttribute('open', '');
       }
-      const t = text || lastMessageText();
+            const t = text || lastMessageText();
       CURTEXT = t || '';
+      CURMESID = (mesid === undefined || mesid === null) ? null : String(mesid);
+      const savedB = CURMESID ? loadBlocks(CURMESID) : '';
       const ex = extractPrompt(t);
-      if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
+      if (savedB) { $('#h3v-prompt').value = savedB; status('ok', '已载入这条之前保存的六段提示词'); }
+      else if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
+      else { $('#h3v-prompt').value = ''; }
       refreshBlockList();
       fillSelects();
       loadMeta();
@@ -512,6 +522,24 @@
 
   /* ---------- 提交 / 轮询（支持多条顺序跑） ---------- */
   /* ---------- 按段配场景 ---------- */
+  /* ---------- 每条正文绑定保存的六段提示词 ---------- */
+  const BLOCKS = (function () {
+    try { const o = JSON.parse(localStorage.getItem('h3v.blocks') || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; }
+  })();
+  let SAVE_T = null;
+  function saveBlocks(id, text) {
+    if (id === null || id === undefined || id === '') return;
+    BLOCKS[String(id)] = { text: String(text || ''), ts: Date.now() };
+    clearTimeout(SAVE_T);
+    SAVE_T = setTimeout(function () {
+      try { localStorage.setItem('h3v.blocks', JSON.stringify(BLOCKS)); } catch (e) { LOG('save blocks fail', e); }
+    }, 300);
+  }
+  function loadBlocks(id) {
+    const v = BLOCKS[String(id)];
+    return v && v.text ? v.text : '';
+  }
+
   const SEGCFG = {};   // { blockIndex: sceneFile }
 
   function renderSegTable() {
@@ -749,6 +777,7 @@
 
   /* ---------- AI 按正文生成（自动分段） ---------- */
   let CURTEXT = '';
+  let CURMESID = null;
 
   const SIX_SYS = `你是 MiniMax H3 全参考模式（Ref2VA）提示词作者。把用户给的正文改写成官方六段格式。
 
@@ -1718,6 +1747,12 @@
     const t = last.querySelector('.mes_text');
     return t ? (t.innerText || t.textContent || '') : (last.innerText || '');
   }
+  function messageId(el) {
+    const mes = el && el.closest ? el.closest('.mes') : null;
+    if (!mes) return null;
+    return mes.getAttribute('mesid') != null ? mes.getAttribute('mesid') : (mes.dataset ? mes.dataset.mesid : null);
+  }
+
   function messageTextOf(el) {
     const mes = el.closest ? el.closest('.mes') : null;
     if (!mes) return '';
@@ -1755,7 +1790,7 @@
     if (!b) return;
     e.preventDefault();
     e.stopPropagation();
-    openPanel(messageTextOf(b) || lastMessageText());
+    openPanel(messageTextOf(b) || lastMessageText(), messageId(b));
   }, true);
 
   const TEMPLATE = `【这是填空用的骨架，不是成品：把 (…) 换成你这段正文里真实的人物/地点/台词】
