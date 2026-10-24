@@ -993,6 +993,7 @@
       taskId: tid,
     };
   }
+  const VIDEOS = []; 
   function showVideos(r, label) {
     const list = (r.items && r.items.length) ? r.items : (r.all || []);
     if (!list.length) status('err', '拿到结果但没有视频条目：' + JSON.stringify(r).slice(0, 160));
