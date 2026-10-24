@@ -167,7 +167,10 @@
 
         <div class="row" style="margin-top:8px">
           <button class="primary" id="h3v-run">生成这一条</button>
-          <button id="h3v-runAll">全部按顺序生成</button>
+          <button id="h3v-runAll">全部生成</button>
+          <select id="h3v-videoConc" style="max-width:96px;flex:none" title="同时跑几条">
+            <option value="1">并发1</option><option value="2" selected>并发2</option><option value="3">并发3</option><option value="4">并发4</option>
+          </select>
           <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
         </div>
 
@@ -217,6 +220,10 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    if ($('#h3v-videoConc')) {
+      $('#h3v-videoConc').value = String(S.videoConc || 2);
+      $('#h3v-videoConc').onchange = function () { S.videoConc = Number($('#h3v-videoConc').value) || 2; saveS(); };
+    }
     if ($('#h3v-runAll')) $('#h3v-runAll').onclick = runAllBlocks;
     if ($('#h3v-prompt')) {
       $('#h3v-prompt').addEventListener('input', () => {
@@ -610,29 +617,56 @@
     refreshBlockList();
   }
 
+  const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
   async function runAllBlocks() {
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
     if (blocks.length === 1) return runVideo();
+    const conc = Math.max(1, Math.min(5, Number(S.videoConc || 2)));
     const btn = $('#h3v-runAll');
     btn.disabled = true;
-    jobBegin('批量生成视频');
-    let okN = 0, coins = 0;
-    for (let i = 0; i < blocks.length; i++) {
-      const sec = blockSeconds(blocks[i]);
-      jobLabel('批量生成视频 · 第 ' + (i + 1) + '/' + blocks.length + ' 条');
-      try {
-        const r = await runOne(blocks[i], sec, '第 ' + (i + 1) + '/' + blocks.length + '条', SEGCFG[i], SEGIMG[i]);
-        okN++; coins += r.coins;
-        showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
-      } catch (e) {
-        status('err', '第 ' + (i + 1) + ' 条失败：' + e.message + '（继续下一条）');
-        await new Promise(r => setTimeout(r, 1500));
+    jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc);
+    let next = 0, okN = 0, doneN = 0, coins = 0;
+
+    async function worker() {
+      while (true) {
+        const i = next++;
+        if (i >= blocks.length) return;
+        const sec = blockSeconds(blocks[i]);
+        jobLabel('批量 · 第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
+        try {
+          let id = null, tries = 8;
+          while (tries-- > 0) {
+            try {
+              id = await submitBlock(blocks[i], sec, SEGCFG[i], SEGIMG[i]);
+              break;
+            } catch (e) {
+              const m = String(e && e.message || '');
+              if (tries > 0 && /并发|busy|已满|RUNNING/i.test(m)) { await sleep(5000); continue; }
+              throw e;
+            }
+          }
+          const r = await waitTask(id, '第 ' + (i + 1) + ' 条');
+          okN++; coins += r.coins || 0;
+          showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
+        } catch (e) {
+          LOG('block fail', i, e);
+          status('err', '第 ' + (i + 1) + ' 条失败：' + e.message);
+          await sleep(1200);
+        }
+        doneN++;
+        status('run', '进度 ' + doneN + '/' + blocks.length + '（成功 ' + okN + '）' + (coins ? ' · 已花 ' + coins + ' 币' : ''));
       }
     }
+
+    const workers = [];
+    for (let k = 0; k < Math.min(conc, blocks.length); k++) workers.push(worker());
+    await Promise.all(workers);
+
     jobEnd();
     btn.disabled = false;
-    status('ok', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
+    status(okN ? 'ok' : 'err', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
   }
 
   const JOB = { t0: 0, label: '', timer: null };
