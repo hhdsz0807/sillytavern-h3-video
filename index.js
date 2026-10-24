@@ -1792,48 +1792,39 @@
   }
 
   async function agentProbe() {
-    if (!agentCfg().raw) { status('err', '先在「Agent 地址」里粘贴完整地址（含 ?token=）'); return; }
     const cfg = agentCfg();
-    const log = [];
-
-    // ① 先按用户粘的整条地址访问一次，拿会话 Cookie
-    try {
-      const r0 = await jpost('/api/fetch', { url: cfg.raw, method: 'GET', headers: {}, body: '' });
-      const hdrs = (r0 && r0.headers) || {};
-      const ckRaw = hdrs['Set-Cookie'] || hdrs['set-cookie'] || '';
-      const ck = ckRaw ? String(ckRaw).split(' | ')[0].split(';')[0] : '';
-      if (ck) { S.agentCookie = ck; saveS(); }
-      log.push('预访问 ' + cfg.raw + ' → ' + (r0 && r0.status) + (ck ? '（拿到 Cookie）' : '（无 Cookie）'));
-    } catch (e) { log.push('预访问失败：' + e.message.slice(0, 50)); }
-
-    const cands = ['/api/chat', '/api/agent/chat', '/api/agent', '/api/message', '/api/send', '/api/generate',
-      '/api/complete', '/api/completions', '/api/sessions', '/api/session', '/api/status', '/api/health',
-      '/v1/chat/completions', '/chat/completions', '/v1/completions', '/v1/models', '/api/models'];
-
-    const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', max_tokens: 8 });
-
-    for (let i = 0; i < cands.length; i++) {
-      const url = cfg.origin + cands[i] + (cfg.token ? ('?token=' + encodeURIComponent(cfg.token)) : '');
-      const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token, 'X-Token': cfg.token };
-      if (S.agentCookie) headers['Cookie'] = S.agentCookie;
-
-      let res = '';
-      try {
-        const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: body });
-        const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 60);
-        res = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
-        if (r && r.status === 405) {
-          const rg = await jpost('/api/fetch', { url: url, method: 'GET', headers: headers, body: '' });
-          const gsnip = String((rg && (rg.body || rg.error)) || '').replace(/\s+/g, ' ').slice(0, 50);
-          res += ' / GET ' + (rg && rg.status ? rg.status : 'ERR') + (rg && rg.ok ? ' ✅ ' + gsnip : ' ' + gsnip);
+    if (!cfg.raw) { status('err', '先在「Agent 地址」粘贴完整地址（含 ?token=）'); return; }
+    const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', input: 'ping', max_tokens: 8 });
+    const paths = ['/api/chat', '/api/agent/chat', '/api/sessions', '/api/message'];
+    const variants = [
+      { label: 'Bearer', h: { Authorization: 'Bearer ' + cfg.token } },
+      { label: 'x-api-key', h: { 'x-api-key': cfg.token } },
+      { label: 'x-dsh-token', h: { 'x-dsh-token': cfg.token } },
+      { label: 'x-access-token', h: { 'x-access-token': cfg.token } },
+      { label: 'x-session-token', h: { 'x-session-token': cfg.token } },
+      { label: 'token头', h: { token: cfg.token } },
+      { label: 'Cookie:token', h: { Cookie: 'token=' + cfg.token } },
+      { label: 'query only', h: {} },
+    ];
+    const log = ['地址 ' + cfg.origin, 'token ' + cfg.token.slice(0, 8) + '…'];
+    for (let i = 0; i < paths.length; i++) {
+      for (let k = 0; k < variants.length; k++) {
+        const url = cfg.origin + paths[i] + '?token=' + encodeURIComponent(cfg.token);
+        const headers = Object.assign({ 'Content-Type': 'application/json' }, variants[k].h);
+        let res = '';
+        try {
+          const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: body });
+          const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 50);
+          res = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
+        } catch (e) { res = 'ERR ' + e.message.slice(0, 30); }
+        log.push(paths[i] + ' [' + variants[k].label + '] → ' + res);
+        if (res.indexOf('✅') >= 0) {
+          status('ok', 'Agent 探测（找到可用组合）\n' + log.join('\n'));
+          return;
         }
-      } catch (e) { res = 'ERR ' + e.message.slice(0, 40); }
-
-      log.push(cands[i] + ' → ' + res);
-      if (res.indexOf('✅') >= 0) break;
+      }
     }
-
-    status('ok', 'Agent 探测\n地址 ' + cfg.origin + '\ntoken ' + (cfg.token ? '已识别' : '未识别') + '\n' + log.join('\n'));
+    status('err', 'Agent 探测（全部未通过）\n' + log.join('\n'));
   }
 
   function callAI(sys, user, len) {
