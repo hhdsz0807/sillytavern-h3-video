@@ -1104,6 +1104,19 @@
     '提示词要求：空间类型 + 关键陈设（3–6 个）+ 材质/色调 + 光源方向与时间 + 镜头（wide shot, 35mm）+ no people, clean background, empty scene；60–100 单词；不要出现人物、文字、水印。\n' +
     '场景数量不超过 6 个；只写正文里真实出现过的地点。';
 
+  function normName(x) {
+    return String(x || '').replace(/[\s\-_·,，。.:：()（）\[\]【】]/g, '').toLowerCase();
+  }
+  function sceneExists(name) {
+    const want = normName(name);
+    if (!want) return null;
+    for (let i = 0; i < SCENES.length; i++) {
+      const nm = normName(SCENES[i].name);
+      if (nm && (nm === want || nm.includes(want) || want.includes(nm))) return SCENES[i];
+    }
+    return null;
+  }
+
   function parseSceneLines(text) {
     const out = [];
     String(text || '').split('\n').forEach(function (l) {
@@ -1123,18 +1136,29 @@
     status('run', '正在从正文提取场景…');
     try {
       const presetLen = (S.aiMode === 'api' && S.usePresetPrompt !== false) ? (await getPresetPrompts() || '').length : 0;
-      const out = await callAI(SCENE_SYS, '画风要求：' + st + '\n正文：\n"""\n' + text + '\n"""', 1500);
-      const list = parseSceneLines(out);
-      if (!list.length) throw new Error('模型没给出场景');
-      $('#h3v-sceneList').value = list.map(function (s) { return s.name + '|' + s.prompt; }).join('\n');
-      status('ok', '提取到 ' + list.length + ' 个场景' + (presetLen ? '（含预设提示词 ' + presetLen + ' 字）' : '') + '，可手改后点「生成全部场景」');
+      const existNames = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
+      const existBlock = existNames.length ? ('【已有场景，能对上就直接照抄这些名字，不要重复造新场景】\n' + existNames.map(function (n) { return '- ' + n; }).join('\n') + '\n') : '';
+      const out = await callAI(SCENE_SYS, '画风要求：' + st + '\n' + existBlock + '正文：\n"""\n' + text + '\n"""', 1500);
+      const all = parseSceneLines(out);
+      if (!all.length) throw new Error('模型没给出场景');
+      const fresh = [], skipped = [];
+      all.forEach(function (s) { (sceneExists(s.name) ? skipped : fresh).push(s); });
+      if (!fresh.length) {
+        $('#h3v-sceneList').value = '';
+        status('ok', '这 ' + all.length + ' 个场景库里都已经有了（' + skipped.map(function (s) { return s.name; }).join('、') + '），不用重生成');
+        return;
+      }
+      $('#h3v-sceneList').value = fresh.map(function (s) { return s.name + '|' + s.prompt; }).join('\n');
+      status('ok', '需要新生成 ' + fresh.length + ' 个' + (skipped.length ? '，跳过已有 ' + skipped.length + ' 个（' + skipped.map(function (s) { return s.name; }).join('、') + '）' : '') + (presetLen ? '（含预设提示词 ' + presetLen + ' 字）' : '') + '，确认后点「生成全部场景」');
     } catch (e) { status('err', '提取失败：' + e.message); }
   }
 
   async function sceneGen() {
     const raw = $('#h3v-sceneList').value.trim();
     if (!raw) { status('err', '先点「按正文出场景提示词」或手写'); return; }
-    const list = parseSceneLines(raw);
+    const listAll = parseSceneLines(raw);
+    const list = listAll.filter(function (s) { return !sceneExists(s.name); });
+    if (!list.length) { status('ok', '这些场景库里都已经有了，跳过生成'); return; }
     const styleKey = $('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime';
     const styleText = SCENE_STYLE[styleKey] || SCENE_STYLE.anime;
     const conc = Math.max(1, Math.min(5, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3));
