@@ -747,9 +747,31 @@
   }
 
   async function apkFileBlob(file) {
+    const local = await IDB.get(file);
+    if (local) return local;
     const r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(file)));
     if (!r.ok) throw new Error('从手机取文件失败：' + file);
     return await r.blob();
+  }
+
+  async function captureTailFromUrl(url) {
+    const blob = await (await fetch(url)).blob();
+    const u = URL.createObjectURL(blob);
+    try {
+      const v = document.createElement('video');
+      v.src = u; v.muted = true; v.preload = 'auto';
+      await new Promise(function (res, rej) {
+        const to = setTimeout(function () { rej(new Error('取尾帧超时')); }, 25000);
+        v.onloadeddata = function () { try { v.currentTime = Math.max(0, (v.duration || 1) - 0.08); } catch (_) {} };
+        v.onseeked = function () { clearTimeout(to); res(); };
+        v.onerror = function () { clearTimeout(to); rej(new Error('视频加载失败')); };
+      });
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth || 768;
+      c.height = v.videoHeight || 1344;
+      c.getContext('2d').drawImage(v, 0, 0);
+      return await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.92); });
+    } finally { URL.revokeObjectURL(u); }
   }
 
   async function cloudVideo(opts) {
@@ -1644,6 +1666,52 @@
     } catch (e) { status('err', '提取失败：' + e.message); }
   }
 
+  /* ---------- 浏览器本地文件库（脱离 APK 用） ---------- */
+  const IDB = (function () {
+    let dbp = null;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (res, rej) {
+        const r = indexedDB.open('h3v-files', 1);
+        r.onupgradeneeded = function () {
+          const db = r.result;
+          if (!db.objectStoreNames.contains('f')) db.createObjectStore('f', { keyPath: 'name' });
+        };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+      });
+      return dbp;
+    }
+    async function put(name, blob, kind) {
+      const db = await open();
+      return new Promise(function (res, rej) {
+        const tx = db.transaction('f', 'readwrite');
+        tx.objectStore('f').put({ name: name, blob: blob, kind: kind || '', ts: Date.now() });
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = function () { rej(tx.error); };
+      });
+    }
+    async function get(name) {
+      try {
+        const db = await open();
+        return await new Promise(function (res, rej) {
+          const tx = db.transaction('f', 'readonly');
+          const rq = tx.objectStore('f').get(name);
+          rq.onsuccess = function () { res(rq.result ? rq.result.blob : null); };
+          rq.onerror = function () { rej(rq.error); };
+        });
+      } catch (_) { return null; }
+    }
+    async function del(name) {
+      try {
+        const db = await open();
+        const tx = db.transaction('f', 'readwrite');
+        tx.objectStore('f').delete(name);
+      } catch (_) {}
+    }
+    return { put: put, get: get, del: del };
+  })();
+
   /* ---------- 云端直连（Krea2 出图，不经过手机 APK） ---------- */
   const RH_BASE = 'https://www.runninghub.ai';
   const WF_K2_T2I = "{\r\n \"53\": {\r\n  \"class_type\": \"CLIPTextEncode\",\r\n  \"inputs\": {\r\n   \"clip\": [\r\n    \"36\",\r\n    0\r\n   ],\r\n   \"text\": [\r\n    \"52\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"31\": {\r\n  \"class_type\": \"ConditioningZeroOut\",\r\n  \"inputs\": {\r\n   \"conditioning\": [\r\n    \"53\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"30\": {\r\n  \"class_type\": \"VAEDecode\",\r\n  \"inputs\": {\r\n   \"samples\": [\r\n    \"28\",\r\n    0\r\n   ],\r\n   \"vae\": [\r\n    \"34\",\r\n    0\r\n   ]\r\n  }\r\n },\r\n \"29\": {\r\n  \"class_type\": \"EmptyLatentImage\",\r\n  \"inputs\": {\r\n   \"width\": [\r\n    \"55\",\r\n    0\r\n   ],\r\n   \"height\": [\r\n    \"55\",\r\n    1\r\n   ],\r\n   \"batch_size\": 1\r\n  }\r\n },\r\n \"27\": {\r\n  \"class_type\": \"SaveImage\",\r\n  \"inputs\": {\r\n   \"images\": [\r\n    \"30\",\r\n    0\r\n   ],\r\n   \"filename_prefix\": \"Krea2-%date:yyyyMMddhhmmss%\"\r\n  }\r\n },\r\n \"35\": {\r\n  \"class_type\": \"Seed (rgthree)\",\r\n  \"inputs\": {\r\n   \"seed\": 685212704886219\r\n  }\r\n },\r\n \"28\": {\r\n  \"class_type\": \"KSampler\",\r\n  \"inputs\": {\r\n   \"model\": [\r\n    \"37\",\r\n    0\r\n   ],\r\n   \"positive\": [\r\n    \"53\",\r\n    0\r\n   ],\r\n   \"negative\": [\r\n    \"31\",\r\n    0\r\n   ],\r\n   \"latent_image\": [\r\n    \"29\",\r\n    0\r\n   ],\r\n   \"seed\": [\r\n    \"35\",\r\n    0\r\n   ],\r\n   \"steps\": 8,\r\n   \"cfg\": 1,\r\n   \"sampler_name\": \"euler\",\r\n   \"scheduler\": \"simple\",\r\n   \"denoise\": 1\r\n  }\r\n },\r\n \"36\": {\r\n  \"class_type\": \"CLIPLoader\",\r\n  \"inputs\": {\r\n   \"clip_name\": \"qwen3vl_4b_fp8_scaled.safetensors\",\r\n   \"type\": \"krea2\",\r\n   \"device\": \"default\"\r\n  }\r\n },\r\n \"34\": {\r\n  \"class_type\": \"VAELoader\",\r\n  \"inputs\": {\r\n   \"vae_name\": \"qwen_image_vae.safetensors\"\r\n  }\r\n },\r\n \"55\": {\r\n  \"class_type\": \"ResolutionSelector\",\r\n  \"inputs\": {\r\n   \"aspect_ratio\": \"9:16 (Portrait Widescreen)\",\r\n   \"megapixels\": 1.2,\r\n   \"multiple\": 32\r\n  }\r\n },\r\n \"37\": {\r\n  \"class_type\": \"UNETLoader\",\r\n  \"inputs\": {\r\n   \"unet_name\": \"krea2_turbo_fp8.safetensors\",\r\n   \"weight_dtype\": \"default\"\r\n  }\r\n },\r\n \"50\": {\r\n  \"class_type\": \"PrimitiveStringMultiline\",\r\n  \"inputs\": {\r\n   \"value\": \"一位黑色长发的年轻亚洲女子站在阳光斑驳的森林中，头发自然披散在肩头并编成一条松散的长辫，用紫色发圈固定。她的皮肤白皙，嘴唇微张，笑容甜美，表情温柔。她身穿一袭白色露肩上衣，领口和袖口饰有精致蕾丝花边，胸前系着蝴蝶结，下摆微微收紧露出紫色腰带；脖子上戴着一条金色细链，坠着一枚椭圆形紫色宝石吊坠。她的右手轻轻捏住一朵紫色风铃草，花瓣舒展，花茎细长带有绿色叶片。柔和的金色阳光从左侧树叶间洒落，整体画面呈现温暖。\"\r\n  }\r\n },\r\n \"52\": {\r\n  \"class_type\": \"easy stylesSelector\",\r\n  \"inputs\": {\r\n   \"positive\": [\r\n    \"50\",\r\n    0\r\n   ],\r\n   \"styles\": \"fooocus_styles\"\r\n  }\r\n }\r\n}";
@@ -2082,6 +2150,25 @@
     return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
   }
 
+  async function hydrateThumbs(root) {
+    if (!root) return;
+    const imgs = root.querySelectorAll('img[data-file]');
+    for (let i = 0; i < imgs.length; i++) {
+      const el = imgs[i];
+      const name = el.getAttribute('data-file');
+      if (!name || el.dataset.done) continue;
+      el.dataset.done = '1';
+      try {
+        const blob = await IDB.get(name);
+        if (blob) {
+          const u = URL.createObjectURL(blob);
+          el.src = u;
+          el.onload = function () { setTimeout(function () { URL.revokeObjectURL(u); }, 8000); };
+        }
+      } catch (_) {}
+    }
+  }
+
   function renderCharList() {
     const box = $('#h3v-charList');
     if (!box) return;
@@ -2117,12 +2204,13 @@
     let html = '';
     SCENES.forEach(function (s, i) {
       html += '<div class="row">' +
-        (s.file ? '<img class="pv" style="display:block;width:64px;height:40px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(s.file) + '">' : '') +
+        (s.file ? '<img class="pv" data-file="' + esc(s.file) + '" style="display:block;width:64px;height:40px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(s.file) + '">' : '') +
         '<input data-sn="' + i + '" value="' + esc(s.name || '') + '" placeholder="场景名（中文）" style="flex:1">' +
         '<button data-suse="' + i + '" style="flex:none">设为默认</button>' +
         '<button data-sdel="' + i + '" style="flex:none">删</button></div>';
     });
     box.innerHTML = html;
+    hydrateThumbs(box);
     box.querySelectorAll('input[data-sn]').forEach(function (el) {
       const i = Number(el.dataset.sn);
       el.oninput = function () { SCENES[i].name = el.value.trim(); saveScenes(); };
@@ -2143,6 +2231,7 @@
         status('ok', '默认场景设为「' + s.name + '」');
       };
     });
+    hydrateThumbs(box);
     box.querySelectorAll('button[data-sdel]').forEach(function (el) {
       const i = Number(el.dataset.sdel);
       el.onclick = function () {
@@ -2153,9 +2242,16 @@
   }
 
   function uploadOne(f) {
+    const ext = (f.name.match(/\.[^.]+$/) || ['.bin'])[0];
+    const localName = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) + ext;
     return fetch(api('/api/upload?name=' + encodeURIComponent(f.name) + '&kind=image'), {
       method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f,
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) { return r.json(); }).catch(function () {
+      return { name: localName, local: true };  // APK 不在也能用：文件只存浏览器本地库
+    }).then(function (j) {
+      if (j && !j.error && j.name) return j;
+      return { name: localName, local: true };
+    });
   }
 
   function uploadChar() {
@@ -2171,6 +2267,7 @@
           if (j.error) throw new Error(j.error);
           if (CHARLIB.length >= 6) { status('err', '角色库最多 6 张'); break; }
           CHARLIB.push({ file: j.name, name: f.name.replace(/\.[^.]+$/, '') });
+          try { await IDB.put(j.name, f, 'image'); } catch (_) {}
           saveChars();
           renderCharList();
         } catch (e) { status('err', '上传失败：' + e.message); }
@@ -2192,6 +2289,7 @@
           const j = await uploadOne(files[k]);
           if (j.error) throw new Error(j.error);
           SCENES.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), prompt: '', style: 'upload', file: j.name, ts: Date.now() });
+          try { await IDB.put(j.name, files[k], 'image'); } catch (_) {}
           saveScenes();
           renderSceneListBox();
         } catch (e) { status('err', '上传失败：' + e.message); }
@@ -2271,6 +2369,7 @@
           }).then(function (r) { return r.json(); });
           if (j.error) throw new Error(j.error);
           AUDIOLIB.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), file: j.name, ts: Date.now() });
+          try { await IDB.put(j.name, files[k], 'audio'); } catch (_) {}
           saveAudios(); renderAudioLib();
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
