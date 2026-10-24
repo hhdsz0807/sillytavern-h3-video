@@ -1790,23 +1790,46 @@
 
   async function agentProbe() {
     const cfg = agentCfg();
+    const log = [];
+
+    // ① 先按用户粘的整条地址访问一次，拿会话 Cookie
+    try {
+      const r0 = await jpost('/api/fetch', { url: cfg.raw, method: 'GET', headers: {}, body: '' });
+      const hdrs = (r0 && r0.headers) || {};
+      const ckRaw = hdrs['Set-Cookie'] || hdrs['set-cookie'] || '';
+      const ck = ckRaw ? String(ckRaw).split(' | ')[0].split(';')[0] : '';
+      if (ck) { S.agentCookie = ck; saveS(); }
+      log.push('预访问 ' + cfg.raw + ' → ' + (r0 && r0.status) + (ck ? '（拿到 Cookie）' : '（无 Cookie）'));
+    } catch (e) { log.push('预访问失败：' + e.message.slice(0, 50)); }
+
     const cands = ['/api/chat', '/api/agent/chat', '/api/agent', '/api/message', '/api/send', '/api/generate',
       '/api/complete', '/api/completions', '/api/sessions', '/api/session', '/api/status', '/api/health',
       '/v1/chat/completions', '/chat/completions', '/v1/completions', '/v1/models', '/api/models'];
-    const lines = [];
+
+    const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', max_tokens: 8 });
+
     for (let i = 0; i < cands.length; i++) {
       const url = cfg.origin + cands[i] + (cfg.token ? ('?token=' + encodeURIComponent(cfg.token)) : '');
-      const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', max_tokens: 8 });
-      let post = '';
+      const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token, 'X-Token': cfg.token };
+      if (S.agentCookie) headers['Cookie'] = S.agentCookie;
+
+      let res = '';
       try {
-        const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token, 'X-Token': cfg.token }, body: body });
+        const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: body });
         const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 60);
-        post = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
-      } catch (e) { post = 'ERR ' + e.message.slice(0, 40); }
-      lines.push(cands[i] + ' → ' + post);
-      if (post.indexOf('✅') >= 0) break;
+        res = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
+        if (r && r.status === 405) {
+          const rg = await jpost('/api/fetch', { url: url, method: 'GET', headers: headers, body: '' });
+          const gsnip = String((rg && (rg.body || rg.error)) || '').replace(/\s+/g, ' ').slice(0, 50);
+          res += ' / GET ' + (rg && rg.status ? rg.status : 'ERR') + (rg && rg.ok ? ' ✅ ' + gsnip : ' ' + gsnip);
+        }
+      } catch (e) { res = 'ERR ' + e.message.slice(0, 40); }
+
+      log.push(cands[i] + ' → ' + res);
+      if (res.indexOf('✅') >= 0) break;
     }
-    status('ok', 'Agent 探测（' + cfg.origin + '，token ' + (cfg.token ? '已识别' : '未识别') + '）\n' + lines.join('\n'));
+
+    status('ok', 'Agent 探测\n地址 ' + cfg.origin + '\ntoken ' + (cfg.token ? '已识别' : '未识别') + '\n' + log.join('\n'));
   }
 
   function callAI(sys, user, len) {
