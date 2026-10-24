@@ -177,13 +177,20 @@
     for (let i = 0; i < 6; i++) {
       const row = document.createElement('div');
       row.className = 'row';
-      row.innerHTML = `<label>角色${i + 1}</label><select data-v="${i}" style="flex:1"></select><button data-up="${i}" style="flex:none">传</button>`;
+      row.innerHTML = `<label>角色${i + 1}</label><select data-v="${i}" style="flex:1"></select><input data-name="${i}" placeholder="名字(中文)" style="max-width:108px;flex:none"><button data-up="${i}" style="flex:none">传</button>`;
       wrap.appendChild(row);
       const pv = document.createElement('img');
       pv.className = 'pv';
       pv.dataset.pv = String(i);
       pv.alt = '';
       wrap.appendChild(pv);
+      const nm = row.querySelector('input[data-name]');
+      if (nm) {
+        const nidx = i;
+        if (!Array.isArray(S.charNames)) S.charNames = ['', '', '', '', '', ''];
+        nm.value = S.charNames[nidx] || '';
+        nm.oninput = function () { S.charNames[nidx] = nm.value.trim(); saveS(); };
+      }
     }
 
     $('#h3v-x').onclick = closePanel;
@@ -476,13 +483,40 @@
   }
 
   /* ---------- 提交 / 轮询（支持多条顺序跑） ---------- */
-  async function submitBlock(blockText, seconds) {
+  /* ---------- 按段配场景 ---------- */
+  const SEGCFG = {};   // { blockIndex: sceneFile }
+
+  function renderSegTable() {
+    const box = $('#h3v-segTable');
+    if (!box) return;
+    const blocks = parseBlocks($('#h3v-prompt').value);
+    if (blocks.length < 2) { box.innerHTML = ''; return; }
+    const opts = '<option value="">（用全局场景图）</option>' +
+      SCENES.map(function (s) { return '<option value="' + esc(s.file) + '">' + esc(s.name) + '</option>'; }).join('');
+    let html = '<div class="hint" style="margin:6px 0 4px">每段可以指定自己的场景图（角色四视图仍是全局那几张，编号不会乱）</div>';
+    blocks.forEach(function (b, i) {
+      const sec = blockSeconds(b);
+      const cast = SEGCAST[i];
+      const tag = cast ? (' · ' + (cast.cast || []).join('/') + ' @ ' + (cast.scene || '未指定场景')) : '';
+      html += '<div class="row"><label>第 ' + (i + 1) + ' 条 · ' + sec + 's' + esc(tag) + '</label>' +
+        '<select data-seg="' + i + '" style="flex:1">' + opts + '</select></div>';
+    });
+    box.innerHTML = html;
+    box.querySelectorAll('select[data-seg]').forEach(function (sel) {
+      const i = Number(sel.dataset.seg);
+      if (SEGCFG[i]) sel.value = SEGCFG[i];
+      sel.onchange = function () { SEGCFG[i] = sel.value; };
+    });
+  }
+
+  async function submitBlock(blockText, seconds, sceneOverride, filesOverride) {
     const images = [];
     for (let i = 0; i < 6; i++) {
       const sel = document.querySelector(`#h3v-views select[data-v="${i}"]`);
       if (sel && sel.value) images.push(sel.value);
     }
-    if ($('#h3v-scene').value) images.push($('#h3v-scene').value);
+    const scenePick = sceneOverride || $('#h3v-scene').value;
+    if (scenePick) images.push(scenePick);
     if (!images.length) throw new Error('至少放一张图（四视图或场景图）');
     const j = await jpost('/api/mm/run', {
       images: images,
@@ -542,7 +576,7 @@
     btn.disabled = true;
     jobBegin('生成视频 · 第' + (idx + 1) + '条');
     try {
-      const r = await runOne(b, sec, '第' + (idx + 1) + '条');
+      const r = await runOne(b, sec, '第' + (idx + 1) + '条', SEGCFG[idx], SEGIMG[idx]);
       showVideos(r, '第 ' + (idx + 1) + ' 条 · ' + sec + 's');
       status('ok', '第' + (idx + 1) + '条完成 · 用时 ' + Math.floor(r.secs / 60) + ' 分 ' + (r.secs % 60) + ' 秒'
         + (r.coins ? ' · ' + r.coins + ' 币' : ''));
@@ -564,7 +598,7 @@
       const sec = blockSeconds(blocks[i]);
       jobLabel('批量生成视频 · 第 ' + (i + 1) + '/' + blocks.length + ' 条');
       try {
-        const r = await runOne(blocks[i], sec, '第' + (i + 1) + '/' + blocks.length + '条');
+        const r = await runOne(blocks[i], sec, '第 ' + (i + 1) + '/' + blocks.length + '条', SEGCFG[i], SEGIMG[i]);
         okN++; coins += r.coins;
         showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
       } catch (e) {
@@ -661,7 +695,7 @@
 8) 正文里的心理活动、内心独白（斜体、*…*、【心想】这类）要转成画外音旁白，写在 detailed_description 里：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；角色真正说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两种都要保留，不要丢。
 9) 六段每段只出现一次；不要在 detailed_description 里重新开始写 subject_definitions / summary / retention_analysis。
 10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。
-12) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
+12) 在 [[H3]] 内**第一行**先输出一行机器标记（只这一行，不要解释）：<!--CAST: 角色名1, 角色名2 | SCENE: 场景名-->；角色名用正文原字。然后六段；六段里 <Subject 1..k> 与 <Picture 1..k> 的顺序必须与 CAST 里角色顺序一致，场景图永远排在最后一位。只使用 CAST 里出现的角色。\n13) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
@@ -883,14 +917,17 @@
     return Promise.resolve(p).then(function (v) { stop(); return v; }, function (e) { stop(); throw e; });
   }
 
-  function aiDiag() {
+  async function aiDiag() {
     const ctx = window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
     if (!ctx) { status('err', '拿不到 SillyTavern.getContext()'); return; }
     const fns = ['generateQuietPrompt', 'generateRaw', 'generate', 'executeSlashCommands', 'executeSlashCommandsWithOptions']
-      .map(k => k + '=' + (typeof ctx[k])).join(', ');
+      .map(function (k) { return k + '=' + (typeof ctx[k]); }).join(', ');
     const s = ctx.chatCompletionSettings || {};
-    status('ok', 'ST API：' + fns + '\n连接源=' + (s.chat_completion_source || '?')
-      + ' 模型=' + (s.openai_model || s.claude_model || s.custom_model || '?')
+    let pLen = 0;
+    try { pLen = ((await getPresetPrompts()) || '').length; } catch (_) {}
+    status('ok', 'ST API：' + fns
+      + '\n连接源=' + (s.chat_completion_source || '?') + ' 模型=' + (s.openai_model || s.claude_model || s.custom_model || '?')
+      + '\n预设提示词：' + (pLen ? (pLen + ' 字（会附加到每次请求）') : '0 字（没读到 / 已关闭）')
       + '\n(ctx 可用项 ' + Object.keys(ctx).length + ' 个)');
   }
 
@@ -1079,11 +1116,12 @@
     if (!text) { status('err', '没有正文：先点楼层 🎬'); return; }
     status('run', '正在从正文提取场景…');
     try {
+      const presetLen = (S.aiMode === 'api' && S.usePresetPrompt !== false) ? (await getPresetPrompts() || '').length : 0;
       const out = await callAI(SCENE_SYS, '画风要求：' + st + '\n正文：\n"""\n' + text + '\n"""', 1500);
       const list = parseSceneLines(out);
       if (!list.length) throw new Error('模型没给出场景');
       $('#h3v-sceneList').value = list.map(function (s) { return s.name + '|' + s.prompt; }).join('\n');
-      status('ok', '提取到 ' + list.length + ' 个场景，可手改后点「生成全部场景」');
+      status('ok', '提取到 ' + list.length + ' 个场景' + (presetLen ? '（含预设提示词 ' + presetLen + ' 字）' : '') + '，可手改后点「生成全部场景」');
     } catch (e) { status('err', '提取失败：' + e.message); }
   }
 
@@ -1187,6 +1225,46 @@
     else { img.removeAttribute('src'); img.style.display = 'none'; }
   }
 
+  /* ---------- 按段解析 CAST → 取对应素材 ---------- */
+  const SEGIMG = {};   // { blockIndex: [file, ...] }
+  const SEGCAST = {};  // { blockIndex: {cast:[names], scene:'name'} }
+
+  function resolveChar(name) {
+    if (!name) return '';
+    const want = String(name).replace(/\s+/g, '');
+    const names = Array.isArray(S.charNames) ? S.charNames : [];
+    for (let i = 0; i < 6; i++) {
+      const nm = (names[i] || '').replace(/\s+/g, '');
+      if (nm && (nm === want || want.includes(nm) || nm.includes(want))) {
+        const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+        if (sel && sel.value) return sel.value;
+      }
+    }
+    return '';
+  }
+  function resolveScene(name) {
+    if (!name) return ($('#h3v-scene') ? $('#h3v-scene').value : '');
+    const want = String(name).replace(/\s+/g, '');
+    for (let i = 0; i < SCENES.length; i++) {
+      const nm = (SCENES[i].name || '').replace(/\s+/g, '');
+      if (nm && (nm === want || want.includes(nm) || nm.includes(want))) return SCENES[i].file || '';
+    }
+    return '';
+  }
+  function parseCastLine(block) {
+    const m = String(block || '').match(/<!--\s*CAST:\s*([^|]*(?:\|[^>]*)?)\s*-->/i);
+    if (!m) return null;
+    const body = m[1];
+    const parts = body.split(/\|/);
+    const cast = (parts[0] || '').split(/[,,、]/).map(function (s) { return s.trim(); }).filter(Boolean);
+    let scene = '';
+    for (let i = 1; i < parts.length; i++) {
+      const mm = parts[i].match(/SCENE\s*:\s*(.+)/i);
+      if (mm) scene = mm[1].trim();
+    }
+    return { cast: cast, scene: scene, raw: m[0] };
+  }
+
   async function genSix() {
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
@@ -1231,7 +1309,21 @@
             if (b2 && /<Picture\s*\d/i.test(b2)) b = b2;
           } catch (e) { LOG('picture retry fail', i, e); }
         }
-        if (b) { const nb = normalizeBlock(b); blocks.push(nb); lastBlock = nb; }
+        if (b) {
+          const cast = parseCastLine(b);
+          if (cast) { b = b.replace(cast.raw, '').trim(); }
+          const nb = normalizeBlock(b);
+          blocks.push(nb); lastBlock = nb;
+          if (cast) {
+            const idx2 = blocks.length - 1;
+            SEGCAST[idx2] = cast;
+            const files = [];
+            cast.cast.forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
+            const sf = resolveScene(cast.scene);
+            if (sf) files.push(sf);
+            if (files.length) SEGIMG[idx2] = files;
+          }
+        }
         await new Promise(r => setTimeout(r, 200));
       }
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
