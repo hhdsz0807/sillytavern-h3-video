@@ -304,7 +304,10 @@
       });
       $('#h3v-prompt').addEventListener('input', function () { saveBlocks(CURMESID, $('#h3v-prompt').value); });
     }
-    dlg.addEventListener('close', () => { dlg.style.display = 'none'; });
+    dlg.addEventListener('close', () => {
+      try { saveBlocks(CURMESID, $('#h3v-prompt').value); } catch (_) {}
+      dlg.style.display = 'none';
+    });
     dlg.addEventListener('cancel', () => { dlg.style.display = 'none'; });
 
     wrap.querySelectorAll('select[data-v]').forEach(sel => { sel.onchange = () => { S.views[Number(sel.dataset.v)] = sel.value; saveS(); }; });
@@ -425,7 +428,7 @@
       CURTEXT = t || '';
       CURMESID = (mesid === undefined || mesid === null) ? null : String(mesid);
       reloadLibsIfCardChanged();
-      const savedB = CURMESID ? loadBlocks(CURMESID) : '';
+      const savedB = loadBlocks(CURMESID || 'last');
       const ex = extractPrompt(t);
       if (savedB) { $('#h3v-prompt').value = savedB; status('ok', '已载入这条之前保存的六段提示词'); }
       else if (ex) { $('#h3v-prompt').value = ex; status('ok', '已抓到这条的六段提示词'); }
@@ -615,7 +618,7 @@
   })();
   let SAVE_T = null;
   function saveBlocks(id, text) {
-    if (id === null || id === undefined || id === '') return;
+    if (id === null || id === undefined || id === '') id = 'last';
     BLOCKS[String(id)] = { text: String(text || ''), ts: Date.now() };
     clearTimeout(SAVE_T);
     SAVE_T = setTimeout(function () {
