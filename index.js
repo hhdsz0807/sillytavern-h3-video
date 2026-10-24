@@ -180,6 +180,11 @@
         <div class="row" style="margin-top:8px">
           <button class="primary" id="h3v-run">生成这一条</button>
           <button id="h3v-runAll">全部生成</button>
+          <label style="min-width:auto">从</label>
+          <input type="number" id="h3v-from" min="1" step="1" value="1" style="max-width:56px;flex:none">
+          <label style="min-width:auto">到</label>
+          <input type="number" id="h3v-to" min="1" step="1" value="2" style="max-width:56px;flex:none">
+          <button id="h3v-runRange" style="flex:none">生成区间</button>
           <input type="number" id="h3v-videoConc" min="1" max="10" step="1" value="2" style="max-width:72px;flex:none" title="同时跑几条">
           <label style="min-width:auto">画风</label>
           <select id="h3v-videoStyle" style="max-width:150px;flex:none">
@@ -678,6 +683,36 @@
     const r = await waitTask(id, label);
     try { await rememberTail(Number(idx), r.items.map(function (v) { return v.url; })); } catch (_) {}
     return r;
+  }
+
+  async function runRange() {
+    const blocks = parseBlocks($('#h3v-prompt').value);
+    if (!blocks.length) { status('err', '没有提示词'); return; }
+    let a = Math.max(1, Number(($('#h3v-from') || {}).value || 1));
+    let b = Math.min(blocks.length, Number(($('#h3v-to') || {}).value || a));
+    if (b < a) { const tmp = a; a = b; b = tmp; }
+    const btn = $('#h3v-runRange');
+    if (btn) btn.disabled = true;
+    jobBegin('生成区间 ' + a + '–' + b + '（串行）');
+    pgSet(0);
+    let okN = 0, coins = 0;
+    for (let i = a - 1; i < b; i++) {
+      const sec = blockSeconds(blocks[i]);
+      jobLabel('第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
+      status('run', '正在提交第 ' + (i + 1) + ' 条…' + (i > a - 1 ? '（会用上一段尾帧）' : ''));
+      try {
+        const r = await runOne(blocks[i], sec, '第 ' + (i + 1) + ' 条', SEGCFG[i], SEGIMG[i], i);
+        okN++; coins += r.coins || 0;
+        showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
+        pgSet(100 * (i - a + 2) / (b - a + 1));
+      } catch (e) {
+        status('err', '第 ' + (i + 1) + ' 条失败：' + e.message);
+        break;
+      }
+    }
+    jobEnd();
+    if (btn) btn.disabled = false;
+    status(okN ? 'ok' : 'err', '区间完成：' + okN + ' 条' + (coins ? ' · ' + coins + ' 币' : ''));
   }
 
   async function runVideo() {
