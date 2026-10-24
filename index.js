@@ -137,6 +137,12 @@
         <div class="row" style="display:none"><select id="h3v-sceneLib"></select><img id="h3v-sceneLibPv" class="pv" alt=""></div>
         <details id="h3v-sceneDetails" style="margin:2px 0 10px"><summary id="h3v-sceneSum" style="cursor:pointer;color:#8b98ab;font-size:13px">场景库（点开）</summary><div id="h3v-sceneListBox"></div></details>
 
+        <div id="h3v-transBox" style="display:none;margin:8px 0">
+          <div class="row"><label>中文对照</label><button id="h3v-transHide" style="flex:none">收起</button></div>
+          <pre id="h3v-transText" style="white-space:pre-wrap;font-size:12.5px;line-height:1.65;background:#12161d;border:1px solid #2a3240;border-radius:8px;padding:10px;max-height:46vh;overflow:auto;margin:0">（还没翻译）</pre>
+        </div>
+        <div id="h3v-segTable"></div>
+
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
@@ -2600,6 +2606,7 @@
     const conc = Math.max(1, Number(S.transConc || S.genConc || 3));
     if (btn) btn.disabled = true;
     if (box) box.style.display = 'block';
+    try { if (box) box.scrollIntoView({ block: 'center' }); } catch (_) {}
     if (outEl) outEl.textContent = '翻译中（并发 ' + conc + '）…';
     jobBegin('翻译 ' + blocks.length + ' 段 · 并发 ' + conc);
     pgSet(5);
