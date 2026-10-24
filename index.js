@@ -271,6 +271,7 @@
       $('#h3v-videoConc').onchange = function () { S.videoConc = Number($('#h3v-videoConc').value) || 2; saveS(); };
     }
     if ($('#h3v-runAll')) $('#h3v-runAll').onclick = runAllBlocks;
+    if ($('#h3v-runRange')) $('#h3v-runRange').onclick = runRange;
     if ($('#h3v-prompt')) {
       $('#h3v-prompt').addEventListener('input', () => {
         clearTimeout(ensureUI._t);
