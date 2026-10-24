@@ -1857,52 +1857,42 @@
   async function agentProbe() {
     const cfg = agentCfg();
     if (!cfg.raw) { status('err', '先在「Agent 地址」粘贴完整地址（含 ?token=）'); return; }
-    // 先试 ACP：POST {origin}/acp initialize
-    try {
-      const r = await jpost('/api/fetch', {
-        url: cfg.origin + '/acp', method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } }),
-      });
-      if (r && r.ok) {
-        S.agentProto = 'acp'; saveS();
-        status('ok', '✅ 找到 ACP 接口：' + cfg.origin + '/acp\n返回：' + String(r.body || '').replace(/\s+/g, ' ').slice(0, 200) + '\n已自动切到 ACP 模式，可以直接生成/修缮/翻译。');
-        return;
-      }
-      LOG('acp probe not ok', r && r.status);
-    } catch (e) { LOG('acp probe err', e); }
 
-    const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', input: 'ping', max_tokens: 8 });
-    const paths = ['/api/chat', '/api/agent/chat', '/api/sessions', '/api/message'];
-    const variants = [
-      { label: 'Bearer', h: { Authorization: 'Bearer ' + cfg.token } },
-      { label: 'x-api-key', h: { 'x-api-key': cfg.token } },
-      { label: 'x-dsh-token', h: { 'x-dsh-token': cfg.token } },
-      { label: 'x-access-token', h: { 'x-access-token': cfg.token } },
-      { label: 'x-session-token', h: { 'x-session-token': cfg.token } },
-      { label: 'token头', h: { token: cfg.token } },
-      { label: 'Cookie:token', h: { Cookie: 'token=' + cfg.token } },
-      { label: 'query only', h: {} },
-    ];
-    const log = ['地址 ' + cfg.origin, 'token ' + cfg.token.slice(0, 8) + '…'];
-    for (let i = 0; i < paths.length; i++) {
-      for (let k = 0; k < variants.length; k++) {
-        const url = cfg.origin + paths[i] + '?token=' + encodeURIComponent(cfg.token);
-        const headers = Object.assign({ 'Content-Type': 'application/json' }, variants[k].h);
+    // 候选端口：你粘的 + DSH 常见的 ACP 端口
+    const portList = [];
+    const m = cfg.origin.match(/:(\d+)$/);
+    if (m) portList.push(m[1]);
+    ['7331', '7330', '3090', '8080', '8000', '3000'].forEach(function (x) { if (portList.indexOf(x) < 0) portList.push(x); });
+    const hostPart = cfg.origin.replace(/:\d+$/, '');
+
+    const log = ['地址 ' + cfg.origin];
+    const initBody = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
+
+    for (let i = 0; i < portList.length; i++) {
+      const base = hostPart + ':' + portList[i];
+      for (let k = 0; k < 2; k++) {
+        const path = k === 0 ? '/acp' : '/acp/';
+        const url = base + path;
         let res = '';
         try {
-          const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: body });
-          const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 50);
-          res = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
-        } catch (e) { res = 'ERR ' + e.message.slice(0, 30); }
-        log.push(paths[i] + ' [' + variants[k].label + '] → ' + res);
-        if (res.indexOf('✅') >= 0) {
-          status('ok', 'Agent 探测（找到可用组合）\n' + log.join('\n'));
-          return;
-        }
+          const r = await jpost('/api/fetch', {
+            url: url, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+            body: initBody,
+          });
+          const code = r && r.status ? r.status : 'ERR';
+          const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 90);
+          res = code + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
+          if (r && r.ok) {
+            S.agentProto = 'acp'; S.agentUrl = base + '/?token=' + cfg.token; saveS();
+            status('ok', '✅ 找到 ACP 接口：' + url + '\n返回：' + snip + '\n已切到 ACP 模式，可以直接生成/修缮/翻译。');
+            return;
+          }
+        } catch (e) { res = 'ERR ' + e.message.slice(0, 40); }
+        log.push(url + ' → ' + res);
       }
     }
-    status('err', 'Agent 探测（全部未通过）\n' + log.join('\n'));
+    status('err', 'Agent 探测（没找到 ACP 接口）\n' + log.join('\n') + '\n\n→ 请在 DSH 设置里找「ACP / 接口 / 端口」，把那个端口告诉我。');
   }
 
   function callAI(sys, user, len) {
