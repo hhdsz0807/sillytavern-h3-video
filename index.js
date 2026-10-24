@@ -752,7 +752,7 @@
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
     if (blocks.length === 1) return runVideo();
-    let conc = Math.max(1, Math.min(10, Number(S.videoConc || 2)));
+    let conc = Math.max(1, Number(S.videoConc || 2));
     if (S.chain !== false) { conc = 1; status('run', '已开启「接上一段尾帧」→ 只能串行跑（否则后一段拿不到前一段的尾帧）'); }
     const btn = $('#h3v-runAll');
     btn.disabled = true;
@@ -1446,7 +1446,7 @@
     if (!list.length) { status('ok', '这些场景库里都已经有了，跳过生成'); return; }
     const styleKey = $('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime';
     const styleText = SCENE_STYLE[styleKey] || SCENE_STYLE.anime;
-    const conc = Math.max(1, Math.min(4, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3));
+    const conc = Math.max(1, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3);
     const btn = $('#h3v-sceneGen');
     btn.disabled = true;
     jobBegin('生成场景（' + list.length + ' 张 · 并发 ' + conc + '）');
