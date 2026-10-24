@@ -1016,7 +1016,8 @@
 
   async function loadVideosFromApk() {
     try {
-      const j = await jget('/api/list');
+      const rr = await withTimeout(fetch(api('/api/list')), 40000, '列出成片 ');
+      const j = await rr.json();
       const list = (j && (j.videos || j.files)) || [];
       let added = 0;
       list.forEach(function (v) {
