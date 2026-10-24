@@ -218,10 +218,11 @@
           <label style="min-width:auto">并发</label>
           <input type="number" id="h3v-videoConc" min="1" max="10" step="1" value="2" style="max-width:64px;flex:none">
           <label style="min-width:auto">画风</label>
-          <select id="h3v-videoStyle" style="max-width:150px;flex:none">
+          <select id="h3v-videoStyle" style="max-width:230px;flex:none">
             <option value="anime">动漫赛璐璐</option>
             <option value="real">写实实拍</option>
             <option value="cinematic">电影感</option>
+            <option value="mixed">混合（角色2D+场景写实）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
           <label style="min-width:auto"><input type="checkbox" id="h3v-videoCloud"> 云端直连</label>
