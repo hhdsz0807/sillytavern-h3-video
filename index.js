@@ -1765,6 +1765,69 @@
     return '';
   }
 
+  /* ---------- ACP（DSH 给程序用的接口）：/acp JSON-RPC + SSE ---------- */
+  function acpUrl() {
+    const cfg = agentCfg();
+    return cfg.origin + '/acp';
+  }
+
+  async function acpPost(payload) {
+    const cfg = agentCfg();
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+    if (cfg.token) { headers['Authorization'] = 'Bearer ' + cfg.token; }
+    const r = await jpost('/api/fetch', {
+      url: acpUrl(), method: 'POST', headers: headers, body: JSON.stringify(payload),
+    });
+    return r;
+  }
+
+  function acpParseText(body) {
+    // SSE: data: {...} 逐行；或纯 JSON
+    const out = [];
+    const lines = String(body || '').split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      let s = lines[i].trim();
+      if (!s) continue;
+      if (s.indexOf('data:') === 0) s = s.slice(5).trim();
+      if (!s || s === '[DONE]') continue;
+      let j = null;
+      try { j = JSON.parse(s); } catch (_) { continue; }
+      const collect = function (o) {
+        if (!o || typeof o !== 'object') return;
+        if (o.sessionUpdate === 'agent_message_chunk' && o.content && typeof o.content.text === 'string') out.push(o.content.text);
+        if (o.result && o.result.stopReason) { /* done */ }
+        if (o.params && o.params.update) collect(o.params.update);
+        if (o.result && o.result.message && typeof o.result.message === 'string') out.push(o.result.message);
+      };
+      collect(j);
+    }
+    return out.join('');
+  }
+
+  async function acpAsk(sys, user) {
+    const init = await acpPost({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
+    if (!init || !init.ok) throw new Error('ACP initialize 失败：' + ((init && (init.error || init.status)) || '无响应'));
+
+    const sn = await acpPost({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/root', mcpServers: [] } });
+    if (!sn || !sn.ok) throw new Error('ACP session/new 失败：' + ((sn && (sn.error || sn.status)) || '无响应'));
+    let sid = '';
+    try {
+      const body = String(sn.body || '');
+      const m = body.match(/"sessionId"\s*:\s*"([^"]+)"/);
+      if (m) sid = m[1];
+    } catch (_) {}
+    if (!sid) throw new Error('ACP 没给 sessionId：' + String(sn.body || '').slice(0, 120));
+
+    const pr = await acpPost({
+      jsonrpc: '2.0', id: 3, method: 'session/prompt',
+      params: { sessionId: sid, prompt: [{ type: 'text', text: sys + '\n\n' + user }] },
+    });
+    if (!pr || !pr.ok) throw new Error('ACP session/prompt 失败：' + ((pr && (pr.error || pr.status)) || '无响应'));
+    const txt = acpParseText(pr.body);
+    if (!txt) throw new Error('ACP 返回无正文：' + String(pr.body || '').slice(0, 160));
+    return txt;
+  }
+
   async function agentGenerate(sys, user, len) {
     const cfg = agentCfg();
     const body = {
@@ -1794,6 +1857,21 @@
   async function agentProbe() {
     const cfg = agentCfg();
     if (!cfg.raw) { status('err', '先在「Agent 地址」粘贴完整地址（含 ?token=）'); return; }
+    // 先试 ACP：POST {origin}/acp initialize
+    try {
+      const r = await jpost('/api/fetch', {
+        url: cfg.origin + '/acp', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } }),
+      });
+      if (r && r.ok) {
+        S.agentProto = 'acp'; saveS();
+        status('ok', '✅ 找到 ACP 接口：' + cfg.origin + '/acp\n返回：' + String(r.body || '').replace(/\s+/g, ' ').slice(0, 200) + '\n已自动切到 ACP 模式，可以直接生成/修缮/翻译。');
+        return;
+      }
+      LOG('acp probe not ok', r && r.status);
+    } catch (e) { LOG('acp probe err', e); }
+
     const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', input: 'ping', max_tokens: 8 });
     const paths = ['/api/chat', '/api/agent/chat', '/api/sessions', '/api/message'];
     const variants = [
