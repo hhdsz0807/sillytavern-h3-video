@@ -152,6 +152,7 @@
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
           <button id="h3v-trans" style="flex:none">看中文翻译</button>
+          <input type="number" id="h3v-transConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none" title="翻译并发">
           <button id="h3v-cancelAI" style="flex:none">取消</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
@@ -354,6 +355,10 @@
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-qc')) $('#h3v-qc').onclick = function () { qcFix(false); };
     if ($('#h3v-trans')) $('#h3v-trans').onclick = translateAll;
+    if ($('#h3v-transConc')) {
+      $('#h3v-transConc').value = String(S.transConc || 3);
+      $('#h3v-transConc').onchange = function () { S.transConc = Number($('#h3v-transConc').value) || 3; saveS(); };
+    }
     if ($('#h3v-transHide')) $('#h3v-transHide').onclick = function () { var b = $('#h3v-transBox'); if (b) b.style.display = 'none'; };
     if ($('#h3v-genConc')) {
       $('#h3v-genConc').value = String(S.genConc || 3);
@@ -2441,34 +2446,53 @@
   async function translateAll() {
     const src = ($('#h3v-prompt') || {}).value || '';
     if (!src.trim()) { status('err', '没有提示词可翻译'); return; }
-    const box = $('#h3v-transBox'), out = $('#h3v-transText');
+    const blocks = parseBlocks(src);
+    if (!blocks.length) { status('err', '没解析到 [[H3]] 块'); return; }
+    const box = $('#h3v-transBox'), outEl = $('#h3v-transText');
     const btn = $('#h3v-trans');
+    const conc = Math.max(1, Number(S.transConc || S.genConc || 3));
     if (btn) btn.disabled = true;
     if (box) box.style.display = 'block';
-    if (out) out.textContent = '翻译中…';
-    jobBegin('翻译提示词');
-    pgSet(20);
-    try {
-      const blocks = parseBlocks(src);
-      const outLines = [];
-      for (let i = 0; i < blocks.length; i++) {
-        jobLabel('翻译 第 ' + (i + 1) + '/' + blocks.length + ' 段');
-        pgSet(20 + 70 * (i / Math.max(1, blocks.length)));
+    if (outEl) outEl.textContent = '翻译中（并发 ' + conc + '）…';
+    jobBegin('翻译 ' + blocks.length + ' 段 · 并发 ' + conc);
+    pgSet(5);
+
+    const res = new Array(blocks.length).fill('');
+    let next = 0, done = 0;
+
+    async function worker() {
+      while (true) {
+        const i = next++;
+        if (i >= blocks.length) return;
         const one = '[[H3]]\n' + blocks[i] + '\n[[/H3]]';
-        let zh = '';
-        try { zh = await callAI(TRANS_SYS, one, 3000); } catch (e) { zh = '（这段翻译失败：' + e.message + '）'; }
-        outLines.push(String(zh || '').trim());
+        try {
+          MAXTOK_OVERRIDE = 2500;   // 翻译不需要长输出，避免被抬到 12000 慢慢憋
+          MAXTIMEOUT = 60000;
+          const zh = await callAI(TRANS_SYS, one, 2500);
+          res[i] = String(zh || '').trim() || '（空）';
+        } catch (err) {
+          res[i] = '（第 ' + (i + 1) + ' 段翻译失败：' + (err && err.message ? err.message : err) + '）';
+        } finally {
+          MAXTOK_OVERRIDE = 0;
+          MAXTIMEOUT = 0;
+        }
+        done++;
+        pgSet(5 + 90 * (done / blocks.length));
+        status('run', '翻译进度 ' + done + '/' + blocks.length + '（并发 ' + conc + '）…');
       }
-      if (out) out.textContent = outLines.join('\n\n');
-      pgSet(100);
-      status('ok', '翻译完成（' + blocks.length + ' 段），左边英文原文没动');
-    } catch (e) {
-      status('err', '翻译失败：' + e.message);
-    } finally {
-      if (btn) btn.disabled = false;
-      jobEnd();
     }
+
+    const ws = [];
+    for (let k = 0; k < Math.min(conc, blocks.length); k++) ws.push(worker());
+    await Promise.all(ws);
+
+    if (outEl) outEl.textContent = res.join('\n\n');
+    if (btn) btn.disabled = false;
+    pgSet(100);
+    jobEnd();
+    status('ok', '翻译完成 ' + blocks.length + ' 段（英文原文没动）');
   }
+
 
   async function qcFix(auto) {
     const box = $('#h3v-prompt');
