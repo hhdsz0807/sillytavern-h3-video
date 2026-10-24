@@ -1356,7 +1356,9 @@
       const r = await withTimeout(fetch('/api/settings/get', { method: 'POST', headers: stHeaders(), body: '{}' }), 15000, '读酒馆设置 ');
       const j = await r.json();
       SETTINGS_RAW = j || {};
-      OAI_CACHE = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
+      let oaiTmp = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
+      if (!oaiTmp || !Object.keys(oaiTmp).length) oaiTmp = j.settings || {};
+      OAI_CACHE = oaiTmp;
     } catch (e) { LOG('oai settings fail', e); OAI_CACHE = {}; }
     return OAI_CACHE;
   }
@@ -1387,13 +1389,22 @@
     });
   }
 
-  async function getPresetNames() {
-    const oai = await getOaiSettings();
-    let bag = oai.preset_settings_openai || oai.presets || null;
-    let names = bag ? Object.keys(bag) : [];
+  function presetStore() {
+    const j = SETTINGS_RAW || {};
+    if (Array.isArray(j.openai_setting_names) && Array.isArray(j.openai_settings)) {
+      return { names: j.openai_setting_names.slice(), arr: j.openai_settings, kind: "array" };
+    }
+    const oai = OAI_CACHE || {};
+    const bag = oai.preset_settings_openai || oai.presets || null;
+    if (bag && typeof bag === "object") return { names: Object.keys(bag), map: bag, kind: "map" };
+    return { names: [], kind: "none" };
+  }
 
+  async function getPresetNames() {
+    await getOaiSettings();
+    const store = presetStore();
+    let names = store.names;
     if (!names.length) {
-      // 兜底：在整份设置里找「像预设」的对象
       const found = [];
       try { collectPresetBags(SETTINGS_RAW || OAI_CACHE || {}, found, 0); } catch (_) {}
       if (found.length) {
@@ -1410,17 +1421,13 @@
   function pickPreset(oai) {
     const name = S.presetName;
     if (!name) return null;
-    let bag = oai.preset_settings_openai || oai.presets || null;
-    if (!bag && PRESET_BAG_PATH && SETTINGS_RAW) {
-      try { bag = SETTINGS_RAW[PRESET_BAG_PATH] || null; } catch (_) {}
-      if (!bag && OAI_CACHE) { try { bag = OAI_CACHE[PRESET_BAG_PATH] || null; } catch (_) {} }
+    const store = presetStore();
+    if (store.kind === "array") {
+      const idx = store.names.indexOf(name);
+      if (idx >= 0 && store.arr[idx]) return store.arr[idx];
     }
-    if (!bag) {
-      const found = [];
-      try { collectPresetBags(OAI_CACHE || {}, found, 0); } catch (_) {}
-      if (found.length) bag = (SETTINGS_RAW || OAI_CACHE || {})[found[0].path];
-    }
-    return bag ? (bag[name] || null) : null;
+    if (store.kind === "map" && store.map[name]) return store.map[name];
+    return null;
   }
 
   async function getPresetPrompts(force) {
