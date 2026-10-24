@@ -169,9 +169,7 @@
         <div class="row" style="margin-top:8px">
           <button class="primary" id="h3v-run">生成这一条</button>
           <button id="h3v-runAll">全部生成</button>
-          <select id="h3v-videoConc" style="max-width:96px;flex:none" title="同时跑几条">
-            <option value="1">并发1</option><option value="2" selected>并发2</option><option value="3">并发3</option><option value="4">并发4</option>
-          </select>
+          <input type="number" id="h3v-videoConc" min="1" max="10" step="1" value="2" style="max-width:72px;flex:none" title="同时跑几条">
           <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
         </div>
 
@@ -630,7 +628,7 @@
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
     if (blocks.length === 1) return runVideo();
-    const conc = Math.max(1, Math.min(5, Number(S.videoConc || 2)));
+    const conc = Math.max(1, Math.min(10, Number(S.videoConc || 2)));
     const btn = $('#h3v-runAll');
     btn.disabled = true;
     jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc);
