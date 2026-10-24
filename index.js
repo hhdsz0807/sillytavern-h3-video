@@ -215,6 +215,7 @@
             <option value="cinematic">电影感</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
+          <label style="min-width:auto"><input type="checkbox" id="h3v-videoCloud"> 云端直连</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-chain"> 接尾帧</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
         </div>
@@ -278,6 +279,10 @@
     if ($('#h3v-videoStyle')) {
       $('#h3v-videoStyle').value = S.videoStyle || 'anime';
       $('#h3v-videoStyle').onchange = function () { S.videoStyle = $('#h3v-videoStyle').value; saveS(); };
+    }
+    if ($('#h3v-videoCloud')) {
+      $('#h3v-videoCloud').checked = !!S.videoCloud;
+      $('#h3v-videoCloud').onchange = function () { S.videoCloud = $('#h3v-videoCloud').checked; saveS(); };
     }
     if ($('#h3v-chain')) {
       $('#h3v-chain').checked = S.chain !== false;
@@ -646,6 +651,20 @@
     return '';
   }
 
+  function buildImagesFor(idx, sceneOverride, filesOverride) {
+    let images = [];
+    if (Array.isArray(filesOverride) && filesOverride.length) {
+      images = filesOverride.slice();
+    } else {
+      CHARLIB.forEach(function (c) { if (images.length < 5) images.push(c.file); });
+      const scenePick = sceneOverride || ($('#h3v-scene') ? $('#h3v-scene').value : '');
+      if (scenePick) images.push(scenePick);
+    }
+    const i2 = Number(idx);
+    if (S.chain !== false && i2 > 0 && SEGLAST[i2 - 1]) images.push(SEGLAST[i2 - 1]);
+    return images;
+  }
+
   async function submitBlock(blockText, seconds, sceneOverride, filesOverride, idx) {
     let images = [];
     if (Array.isArray(filesOverride) && filesOverride.length) {
@@ -707,6 +726,98 @@
     });
   }
 
+  /* ---------- 云端直连：H3 视频 ---------- */
+  const WF_MM = "{\"23\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"None\"},\"_meta\":{\"title\":\"加载图像\"}},\"48\":{\"class_type\":\"LoadAudio\",\"inputs\":{\"audio\":\"None\",\"audioUI\":\"\"},\"_meta\":{\"title\":\"加载音频\"}},\"27\":{\"class_type\":\"VHS_LoadVideo\",\"inputs\":{\"custom_height\":0,\"force_rate\":0,\"custom_width\":0,\"select_every_nth\":1,\"frame_load_cap\":0,\"format\":\"AnimateDiff\",\"video\":\"\",\"skip_first_frames\":0,\"force_size\":\"Disabled\"},\"_meta\":{\"title\":\"加载视频\"}},\"49\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"22785d770f0efdcf632f8e8a954a4b05032b63a4ac5a92e74da551fed6020ab2.jpg\"},\"_meta\":{\"title\":\"加载图像\"}},\"192\":{\"class_type\":\"UNETLoader\",\"inputs\":{\"weight_dtype\":\"default\",\"unet_name\":\"minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors\"},\"_meta\":{\"title\":\"UNET加载器\"}},\"250\":{\"class_type\":\"ComfyMathExpression\",\"inputs\":{\"expression\":\"max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17\",\"values.a\":[\"259\",0]},\"_meta\":{\"title\":\"Math Expression\"}},\"252\":{\"class_type\":\"ResolutionSelector\",\"inputs\":{\"aspect_ratio\":\"16:9 (Widescreen)\",\"megapixels\":1.5,\"multiple\":32},\"_meta\":{\"title\":\"分辨率选择器\"}},\"253\":{\"class_type\":\"VAEDecode\",\"inputs\":{\"vae\":[\"36\",0],\"samples\":[\"397\",0]},\"_meta\":{\"title\":\"VAE解码\"}},\"254\":{\"class_type\":\"VAEDecodeAudio\",\"inputs\":{\"vae\":[\"37\",0],\"samples\":[\"397\",0]},\"_meta\":{\"title\":\"VAE解码_Audio\"}},\"331\":{\"class_type\":\"ModelAttentionBackend\",\"inputs\":{\"attention\":\"comfy kitchen attention\",\"model\":[\"400\",0]},\"_meta\":{\"title\":\"ModelAttentionBackend\"}},\"397\":{\"class_type\":\"SelfLiftH3Sampler\",\"inputs\":{\"upscaler_model\":\"minimax_h3_latent_upscaler_3d_fp16_V2.safetensors\",\"latent_image\":[\"265\",1],\"seed\":29732110694208,\"upscaler_unload\":true,\"cfg\":1,\"w_max\":1,\"transition_step\":6,\"positive\":[\"265\",0],\"lowres_scale\":0.6000000000000001,\"sampler\":[\"255\",0],\"negative\":[\"328\",0],\"w_min\":0.5,\"rho\":0,\"model\":[\"329\",0],\"vae\":[\"36\",0],\"sigmas\":[\"261\",0],\"highres_tiling\":false},\"_meta\":{\"title\":\"SelfLift Progressive Sampler (MiniMax H3)\"}},\"255\":{\"class_type\":\"KSamplerSelect\",\"inputs\":{\"sampler_name\":\"euler\"},\"_meta\":{\"title\":\"K采样器选择\"}},\"332\":{\"class_type\":\"BlockSparseAttention\",\"inputs\":{\"selection\":\"sol-attn\",\"extra_tokens\":256,\"selection.tau\":1.3,\"dense_blocks\":\"\",\"start_percent\":0.2,\"model\":[\"331\",0],\"end_percent\":1,\"sink_conditioning\":\"exact_kv_and_rows\",\"min_tokens\":12288,\"verbose\":true},\"_meta\":{\"title\":\"Model Sparse Attention\"}},\"333\":{\"class_type\":\"MiniMaxH3SigmaShift\",\"inputs\":{\"shift_audio\":3.0000000000000004,\"shift_video\":12,\"model\":[\"332\",0]},\"_meta\":{\"title\":\"ModelSamplingMiniMaxH3\"}},\"259\":{\"class_type\":\"PrimitiveFloat\",\"inputs\":{\"value\":12},\"_meta\":{\"title\":\"视频时长（秒）\"}},\"50\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"ccdfa9981fda9e6d1d6ca858ff717afd359a62c2ddf4d322449653d5814d265e.jpg\"},\"_meta\":{\"title\":\"加载图像\"}},\"51\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"c715baaee3fa989a7a8c94643fb7945e36f943b91a5a28182e44c895c565eec3.jpg\"},\"_meta\":{\"title\":\"加载图像\"}},\"53\":{\"class_type\":\"LoraLoaderModelOnly\",\"inputs\":{\"lora_name\":\"minimax_h3_dmad_full_dareties_v4_step600_comfy_fro.safetensors\",\"strength_model\":0.8000000000000002,\"model\":[\"192\",0]},\"_meta\":{\"title\":\"LoRA加载器(仅模型)\"}},\"14\":{\"class_type\":\"LoadAudio\",\"inputs\":{\"audio\":\"None\",\"audioUI\":\"\"},\"_meta\":{\"title\":\"加载音频\"}},\"36\":{\"class_type\":\"VAELoader\",\"inputs\":{\"vae_name\":\"minimax_h3_video_vae_int8_convrot.safetensors\"},\"_meta\":{\"title\":\"VAE加载器\"}},\"15\":{\"class_type\":\"LoadAudio\",\"inputs\":{\"audio\":\"None\",\"audioUI\":\"\"},\"_meta\":{\"title\":\"加载音频\"}},\"37\":{\"class_type\":\"VAELoader\",\"inputs\":{\"vae_name\":\"minimax_h3_audio_vae_fp32.safetensors\"},\"_meta\":{\"title\":\"VAE加载器\"}},\"38\":{\"class_type\":\"CLIPLoader\",\"inputs\":{\"clip_name\":\"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors\",\"type\":\"minimax\",\"device\":\"default\"},\"_meta\":{\"title\":\"CLIP加载器\"}},\"19\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"None\"},\"_meta\":{\"title\":\"加载图像\"}},\"261\":{\"class_type\":\"BasicScheduler\",\"inputs\":{\"scheduler\":\"simple\",\"denoise\":1,\"model\":[\"329\",0],\"steps\":12},\"_meta\":{\"title\":\"基础调度器\"}},\"263\":{\"class_type\":\"Text\",\"inputs\":{\"text\":\"subject_definitions:\\n\\u003cSubject 1\\u003e is the female doctor from \\u003cPicture 1\\u003e, preserving her facial identity, low black hair bun, white medical coat, green scrubs, and stethoscope.\\n\\u003cSubject 2\\u003e is the young adult male patient from \\u003cPicture 2\\u003e, preserving his facial identity, short textured black hair, slate-blue T-shirt, black trousers, and white shoes.\\n\\u003cSubject 3\\u003e is the consultation room from \\u003cPicture 3\\u003e, preserving the desk, monitor, rear window and blinds, cabinet, hospital posters, medical trolley, and black patient chair. The nearby exit is just beyond the original framing on the patient\\u0027s side, screen right. Character identities follow \\u003cPicture 1\\u003e and \\u003cPicture 2\\u003e.\\n\\u003cAudio 1\\u003e is the voice-timbre reference for \\u003cSubject 1\\u003e (S2).\\n\\u003cAudio 2\\u003e is the voice-timbre reference for \\u003cSubject 2\\u003e (S1).\\n\\nsummary:\\n[reference generation + audio reference] A 14-second conclusion to the consultation. \\u003cSubject 2\\u003e thanks \\u003cSubject 1\\u003e and leaves \\u003cSubject 3\\u003e. She silently acknowledges him, then answers a vibrating smartphone and speaks affectionately to her husband. The patient follows \\u003cAudio 2\\u003e; all of the doctor\\u0027s phone dialogue follows \\u003cAudio 1\\u003e.\\n\\nretention_analysis:\\n\\u003cSubject 1\\u003e (appears in [Shot 1], [Shot 2], [Shot 3], [Shot 4]): fully_preserved - retain her identity, hairstyle, clothing, and stethoscope.\\n\\u003cSubject 2\\u003e (appears in [Shot 1], [Shot 2]): fully_preserved - retain his identity and clothing throughout his farewell and departure.\\n\\u003cSubject 3\\u003e (appears in [Shot 1], [Shot 2], [Shot 3], [Shot 4]): fully_preserved - retain furniture, daylight, desk-prop positions, and established spatial relationships.\\n\\u003cAudio 1\\u003e: reference - retain the doctor\\u0027s vocal identity and timbre during her affectionate phone conversation, adapting emotion without changing the speaker\\u0027s voice; source dialogue and background sounds are not copied.\\n\\u003cAudio 2\\u003e: reference - retain the patient\\u0027s vocal identity and timbre during his polite farewell; source dialogue and background sounds are not copied.\\n\\ndetailed_description:\\nContinue the same realistic live-action Chinese drama, 16:9, with matched daylight, color, character identities, and restrained performances. The doctor\\u0027s voice remains tied to \\u003cAudio 1\\u003e as her delivery changes from clinical reserve to private warmth. The patient\\u0027s voice remains tied to \\u003cAudio 2\\u003e. All dialogue is newly performed with synchronized Mandarin lip movement.\\n\\n[Shot 1] A medium close-up frames \\u003cSubject 2\\u003e, still seated in his slate-blue T-shirt, looking toward \\u003cSubject 1\\u003e off screen left. Her softly blurred white-coated shoulder remains at the left foreground edge. He briefly lowers his eyes, then looks back with a polite, accepting expression. \\u003cSubject 2\\u003e (S1), using the vocal identity and timbre of \\u003cAudio 2\\u003e, says with a brief hesitation after “那”: \\u003cd\\u003e[Chinese] 好吧，那……我先回去了，谢谢主任。\\u003c/d\\u003e Complete the sentence by approximately 00:03.200. He then leans forward slightly to prepare to stand.\\n\\n[Shot 2] At 00:03.500, the camera cuts to the established medium-wide two-shot of \\u003cSubject 3\\u003e, with \\u003cSubject 1\\u003e behind the desk on screen left and \\u003cSubject 2\\u003e on screen right. He rises naturally, moving the black chair backward a short distance with a subdued scrape. She gives one small silent nod and follows him with her eyes. He walks around his side of the desk and exits frame right by approximately 00:06.400. His footsteps recede toward the nearby exit. At approximately 00:06.600, the black smartphone on the doctor\\u0027s side of the desk starts vibrating against the tabletop. She looks down toward it.\\n\\n[Shot 3] At 00:07.200, the camera cuts to a tight desk-level insert of the vibrating phone beside the closed medical file. \\u003cSubject 1\\u003e\\u0027s right hand picks it up and taps once to answer. The vibration stops. Her right hand begins lifting the phone toward her ear, preserving the continuous physical action.\\n\\n[Shot 4] At 00:08.300, the camera cuts to a medium close-up of \\u003cSubject 1\\u003e with the phone at her right ear. Her shoulders relax and her expression softens. \\u003cSubject 1\\u003e (S2), using the vocal identity and timbre of \\u003cAudio 1\\u003e with affectionate, familiar delivery, says: \\u003cd\\u003e[Chinese] 喂，老公……\\u003c/d\\u003e During the short listening pause, she raises her left wrist and glances at her watch around 00:09.700–00:10.300. Keeping the phone at her right ear, \\u003cSubject 1\\u003e (S2) continues with the same timbre referenced from \\u003cAudio 1\\u003e: \\u003cd\\u003e[Chinese] 刚好下班，你等我一下。\\u003c/d\\u003e Finish by approximately 00:12.800. She lowers her wrist and holds a small private smile while listening until 00:14.000. Her husband\\u0027s voice is not audible.\\n\\noverall_soundscape:\\nContinuous quiet room ambience supports the synchronized chair scrape, clothing movement, receding footsteps, phone vibration against the desk, and phone-handling sounds. Generate these physical sounds independently of the voice-reference recordings. Use no ringtone, audible caller response, added comedy effects, or music.\\n\\nnon_diegetic_music:\\nN/A\"},\"_meta\":{\"title\":\"文本\"}},\"363\":{\"class_type\":\"忽略多组孤海\",\"inputs\":{},\"_meta\":{\"title\":\"忽略多组 孤海\"}},\"265\":{\"class_type\":\"MiniMaxH3ReferenceToVideo\",\"inputs\":{\"ref_images.ref_image_0\":[\"51\",0],\"ref_images.ref_image_1\":[\"49\",0],\"length\":[\"250\",1],\"ref_images.ref_image_2\":[\"50\",0],\"ref_image_size\":\"match\",\"audio_vae\":[\"37\",0],\"ref_images.ref_image_3\":[\"43\",0],\"ref_images.ref_image_4\":[\"19\",0],\"ref_images.ref_image_5\":[\"23\",0],\"ref_videos.ref_video_0\":[\"27\",0],\"ref_audios.ref_audio_2\":[\"15\",0],\"width\":[\"252\",0],\"vae\":[\"36\",0],\"ref_audios.ref_audio_1\":[\"14\",0],\"prompt\":[\"263\",0],\"ref_audios.ref_audio_0\":[\"48\",0],\"clip\":[\"38\",0],\"height\":[\"252\",1]},\"_meta\":{\"title\":\"MiniMax H3 Reference to Video\"}},\"364\":{\"class_type\":\"VHS_VideoCombine\",\"inputs\":{\"images\":[\"253\",0],\"pix_fmt\":\"yuv420p\",\"format\":\"video/h264-mp4\",\"frame_rate\":24,\"pingpong\":false,\"save_output\":true,\"filename_prefix\":\"YZ_H3_\",\"loop_count\":0,\"save_metadata\":true,\"crf\":19,\"trim_to_audio\":false,\"no_preview\":false,\"audio\":[\"254\",0]},\"_meta\":{\"title\":\"合并为视频\"}},\"400\":{\"class_type\":\"LoraLoaderModelOnly\",\"inputs\":{\"lora_name\":\"MysticXXX_MMH3-V1.safetensors\",\"strength_model\":0.3500000000000001,\"model\":[\"53\",0]},\"_meta\":{\"title\":\"LoRA加载器(仅模型)\"}},\"401\":{\"class_type\":\"MiniMaxChunkFeedForward\",\"inputs\":{\"chunks\":2,\"model\":[\"333\",0],\"seq_threshold\":4096},\"_meta\":{\"title\":\"MiniMax H3 ChunkFeedForward\"}},\"328\":{\"class_type\":\"ConditioningZeroOut\",\"inputs\":{\"conditioning\":[\"265\",0]},\"_meta\":{\"title\":\"条件零化\"}},\"307\":{\"class_type\":\"忽略多组孤海\",\"inputs\":{},\"_meta\":{\"title\":\"忽略多组 孤海\"}},\"329\":{\"class_type\":\"ModelPreviewOverrideKJ\",\"inputs\":{\"preview_frames\":1024,\"suppress_default_preview\":true,\"jpeg_quality\":80,\"tiny_vae\":\"taeh3.safetensors\",\"model\":[\"401\",0],\"vae\":[\"36\",0],\"preview_fps\":12,\"max_resolution\":1024},\"_meta\":{\"title\":\"Model Preview Override KJ\"}},\"308\":{\"class_type\":\"忽略多组孤海\",\"inputs\":{},\"_meta\":{\"title\":\"忽略多组 孤海\"}},\"309\":{\"class_type\":\"忽略多组孤海\",\"inputs\":{},\"_meta\":{\"title\":\"忽略多组 孤海\"}},\"43\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"None\"},\"_meta\":{\"title\":\"加载图像\"}}}";
+  const MM_IMG_NODES = ['51', '49', '50', '43', '19', '23'];
+  const MM_AUD_NODES = ['48', '14', '15'];
+
+  async function rhUpload(name, blob) {
+    const acc = cloudAcc();
+    if (!acc || !acc.apiKey) throw new Error('云端直连需要带 API Key 的账号');
+    const fd = new FormData();
+    fd.append('apiKey', acc.apiKey);
+    fd.append('file', blob, name);
+    const r = await fetch(RH_BASE + '/task/openapi/upload', { method: 'POST', body: fd });
+    const txt = await r.text();
+    let j = null;
+    try { j = JSON.parse(txt); } catch (_) { throw new Error('上传返回非 JSON：' + txt.slice(0, 120)); }
+    const fn = (j.data && (j.data.fileName || j.data.name)) || j.fileName;
+    if (!fn) throw new Error('上传失败：' + txt.slice(0, 140));
+    return fn;
+  }
+
+  async function apkFileBlob(file) {
+    const r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(file)));
+    if (!r.ok) throw new Error('从手机取文件失败：' + file);
+    return await r.blob();
+  }
+
+  async function cloudVideo(opts) {
+    const acc = cloudAcc();
+    if (!acc || !acc.apiKey) throw new Error('云端直连需要先在「H3账号」里导入带 API Key 的账号');
+    const wf = JSON.parse(WF_MM);
+    if (wf['263']) wf['263'].inputs.text = opts.prompt;
+    if (wf['252']) {
+      wf['252'].inputs.aspect_ratio = opts.aspect || '16:9 (Widescreen)';
+      wf['252'].inputs.megapixels = opts.mp || 0.98;
+    }
+    if (wf['259']) wf['259'].inputs.value = opts.seconds;
+    if (wf['261']) wf['261'].inputs.steps = opts.steps || 12;
+
+    const imgs = (opts.images || []).slice(0, 6);
+    for (let i = 0; i < MM_IMG_NODES.length; i++) {
+      const id = MM_IMG_NODES[i];
+      if (!wf[id]) continue;
+      if (imgs[i]) {
+        jobLabel('云端上传图 ' + (i + 1) + '/' + imgs.length);
+        const blob = await apkFileBlob(imgs[i]);
+        wf[id].inputs.image = await rhUpload(imgs[i], blob);
+      } else {
+        wf[id].inputs.image = 'None';
+      }
+    }
+    const auds = (opts.audios || []).slice(0, 3);
+    for (let i = 0; i < MM_AUD_NODES.length; i++) {
+      const id = MM_AUD_NODES[i];
+      if (!wf[id]) continue;
+      if (auds[i]) {
+        jobLabel('云端上传音频 ' + (i + 1) + '/' + auds.length);
+        const blob = await apkFileBlob(auds[i]);
+        wf[id].inputs.audio = await rhUpload(auds[i], blob);
+      }
+    }
+
+    const c = await rhPost('/task/openapi/create', {
+      workflowId: '2112032226968285186',
+      workflow: JSON.stringify(wf),
+    });
+    const tid = c && c.data && c.data.taskId;
+    if (!tid) throw new Error('提交失败：' + JSON.stringify(c).slice(0, 180));
+
+    const t0 = Date.now();
+    let st = 'RUNNING';
+    while (Date.now() - t0 < 900000) {
+      await new Promise(function (r) { setTimeout(r, 8000); });
+      const s = await rhPost('/task/openapi/status', { taskId: tid });
+      st = s && s.data;
+      jobLabel('云端跑片 ' + Math.floor((Date.now() - t0) / 60000) + ' 分 ' + (Math.round((Date.now() - t0) / 1000) % 60) + ' 秒');
+      if (st === 'SUCCESS' || st === '3') break;
+      if (st === 'FAILED' || st === '2') throw new Error('云端任务失败（' + tid + '）');
+    }
+    const o = await rhPost('/task/openapi/outputs', { taskId: tid });
+    const arr = (o && o.data) || [];
+    const vids = arr.filter(function (x) { return /\.(mp4|webm|mov)(\?|$)/i.test(x.fileUrl || ''); });
+    if (!vids.length) throw new Error('任务结束但没拿到视频');
+    return {
+      items: vids.map(function (v) {
+        return { url: v.fileUrl, filename: (v.fileUrl.split('/').pop() || 'h3.mp4') };
+      }),
+      coins: 0,
+      secs: Math.round((Date.now() - t0) / 1000),
+      taskId: tid,
+    };
+  }
+
   const VIDEOS = [];
 
   function showVideos(r, label) {
@@ -715,6 +826,8 @@
     });
     renderOut();
   }
+
+  function vurl(u) { return /^https?:/i.test(u) ? u : api(u); }
 
   function renderOut() {
     const box = $('#h3v-out');
@@ -728,8 +841,8 @@
     }
     const body = VIDEOS.map(function (v, i) {
       return '<div style="margin-top:10px"><div class="hint">' + esc(v.label || '') + ' · ' + esc(v.name || '') + '</div>'
-        + '<video src="' + api(v.url) + '" controls playsinline></video>'
-        + '<div><a href="' + api(v.url) + '" download="' + esc(v.name || 'h3.mp4') + '">下载</a>'
+        + '<video src="' + vurl(v.url) + '" controls playsinline></video>'
+        + '<div><a href="' + vurl(v.url) + '" download="' + esc(v.name || 'h3.mp4') + '">下载</a>'
         + ' <button data-vdel="' + i + '" style="margin-left:8px">删</button></div></div>';
     }).join('');
     box.innerHTML = head + body;
