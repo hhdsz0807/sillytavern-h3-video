@@ -1479,11 +1479,26 @@
   }
   function callAI(sys, user, len) {
     jobLabel(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
-    const stop = function () {};
-    const p = withPreset(sys, user).then(function (pair) {
-      return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
-    });
-    return Promise.resolve(p).then(function (v) { stop(); return v; }, function (e) { stop(); throw e; });
+    const one = function () {
+      return withPreset(sys, user).then(function (pair) {
+        return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
+      });
+    };
+    // 网络层失败（中转限流/跨域拒绝/断流）自动退避重试
+    const withRetry = async function (n) {
+      try { return await one(); } catch (err) {
+        const msg = String(err && err.message || '');
+        const retryable = /Failed to fetch|NetworkError|network|超时|timeout|load failed|ECONN/i.test(msg);
+        if (n < 3 && retryable) {
+          const wait = 1500 * (n + 1);
+          status('run', '请求失败（' + msg.slice(0, 40) + '），' + Math.round(wait / 1000) + ' 秒后重试 ' + (n + 1) + '/3…');
+          await new Promise(function (r) { setTimeout(r, wait); });
+          return withRetry(n + 1);
+        }
+        throw err;
+      }
+    };
+    return withRetry(0);
   }
 
   async function aiDiag() {
