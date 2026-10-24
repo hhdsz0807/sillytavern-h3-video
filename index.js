@@ -97,6 +97,19 @@
           <label style="min-width:auto">步数</label><input type="text" id="h3v-steps" value="${esc(S.steps)}" style="max-width:56px;flex:none">
         </div>
 
+        <div class="row"><label>场景</label>
+          <button id="h3v-scenePlan" style="flex:none">按正文出场景提示词</button>
+          <button id="h3v-sceneGen" style="flex:none">生成全部场景</button>
+          <span class="hint" id="h3v-sceneState"></span>
+        </div>
+        <textarea id="h3v-sceneList" rows="4" placeholder="每行一个场景：场景名|英文出图提示词（会自动补 no people / clean background）"></textarea>
+        <div class="row"><label>场景库</label>
+          <select id="h3v-sceneLib" style="flex:1"></select>
+          <button id="h3v-sceneUse" style="flex:none">设为场景图</button>
+          <button id="h3v-sceneDel" style="flex:none">删</button>
+        </div>
+        <img id="h3v-sceneLibPv" class="pv" alt="">
+
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
@@ -227,6 +240,24 @@
     }
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
+    if ($('#h3v-scenePlan')) $('#h3v-scenePlan').onclick = scenePlan;
+    if ($('#h3v-sceneGen')) $('#h3v-sceneGen').onclick = sceneGen;
+    if ($('#h3v-sceneLib')) {
+      $('#h3v-sceneLib').onchange = sceneLibPreview;
+      refreshSceneLib();
+    }
+    if ($('#h3v-sceneUse')) $('#h3v-sceneUse').onclick = function () {
+      const s = SCENES[Number($('#h3v-sceneLib').value)];
+      if (!s || !s.file) { status('err', '先选一个场景'); return; }
+      S.scene = s.file; saveS();
+      const sel = $('#h3v-scene');
+      if (sel) { if (!Array.from(sel.options).some(o => o.value === s.file)) { const o = document.createElement('option'); o.value = s.file; o.textContent = s.file; sel.appendChild(o); } sel.value = s.file; }
+      status('ok', '已把「' + s.name + '」设为视频场景图');
+    };
+    if ($('#h3v-sceneDel')) $('#h3v-sceneDel').onclick = function () {
+      const i = Number($('#h3v-sceneLib').value);
+      if (!isNaN(i) && SCENES[i] && confirm('从场景库删掉「' + SCENES[i].name + '」？（不会删文件）')) { SCENES.splice(i, 1); saveScenes(); refreshSceneLib(); }
+    };
 
     fillSelects();
   }
@@ -990,6 +1021,119 @@
     let last = shots[shots.length - 1] || dd;
     last = last.replace(/\s+/g, ' ').trim();
     return last.slice(-320);
+  }
+
+  /* ---------- 场景库（Krea2 出图 → 存库 → 视频用） ---------- */
+  const SCENES = (function () {
+    try { const a = JSON.parse(localStorage.getItem('h3v.scenes') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
+  })();
+  const saveScenes = function () { try { localStorage.setItem('h3v.scenes', JSON.stringify(SCENES)); } catch (_) {} };
+
+  const SCENE_SYS = '你是场景设定师。读用户给的角色扮演/小说正文，找出这段里出现过的**所有场景**（同一个地方不同时间算一个），为每个场景写一条**英文出图提示词**。\n' +
+    '输出格式：每行一条，纯文本，不要编号解释：\n场景名|英文提示词\n' +
+    '提示词要求：空间类型 + 关键陈设（3–6 个）+ 材质/色调 + 光源方向与时间 + 镜头（wide shot, 35mm）+ no people, clean background, empty scene；60–100 单词；不要出现人物、文字、水印。\n' +
+    '场景数量不超过 6 个；只写正文里真实出现过的地点。';
+
+  function parseSceneLines(text) {
+    const out = [];
+    String(text || '').split('\n').forEach(function (l) {
+      l = l.trim().replace(/^[-*\d.、\s]+/, '');
+      if (!l) return;
+      const parts = l.split(/[|｜]/);
+      if (parts.length >= 2) out.push({ name: parts[0].trim(), prompt: parts.slice(1).join('|').trim() });
+      else out.push({ name: '场景' + (out.length + 1), prompt: l });
+    });
+    return out.slice(0, 6);
+  }
+
+  async function scenePlan() {
+    const text = (CURTEXT || lastMessageText() || '').trim();
+    if (!text) { status('err', '没有正文：先点楼层 🎬'); return; }
+    status('run', '正在从正文提取场景…');
+    try {
+      const out = await callAI(SCENE_SYS, '正文：\n"""\n' + text + '\n"""', 1500);
+      const list = parseSceneLines(out);
+      if (!list.length) throw new Error('模型没给出场景');
+      $('#h3v-sceneList').value = list.map(function (s) { return s.name + '|' + s.prompt; }).join('\n');
+      status('ok', '提取到 ' + list.length + ' 个场景，可手改后点「生成全部场景」');
+    } catch (e) { status('err', '提取失败：' + e.message); }
+  }
+
+  async function sceneGen() {
+    const raw = $('#h3v-sceneList').value.trim();
+    if (!raw) { status('err', '先点「按正文出场景提示词」或手写'); return; }
+    const list = parseSceneLines(raw);
+    const btn = $('#h3v-sceneGen');
+    btn.disabled = true;
+    jobBegin('生成场景');
+    let done = 0;
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      jobLabel('场景 ' + (i + 1) + '/' + list.length + '：' + s.name);
+      status('run', '场景 ' + (i + 1) + '/' + list.length + ' 出图中…（约 40 秒/张）');
+      try {
+        const j = await jpost('/api/krea2/run', {
+          mode: 't2i',
+          prompt: s.prompt + ', no people, clean background, empty scene',
+          aspect: '16:9 (Widescreen)',
+          mp: 1.5,
+          prefix: 'scene',
+        });
+        const file = await waitKrea2(j.taskId);
+        // 把出图搬进 input 目录，视频那边才能直接选
+        const blob = await (await fetch(api(file))).blob();
+        const fd = new FormData();
+        fd.append('file', blob, 'scene_' + Date.now() + '.png');
+        const up = await fetch(api('/api/upload?name=' + encodeURIComponent('scene_' + Date.now() + '.png') + '&kind=image'), {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
+        }).then(r => r.json());
+        if (up.error) throw new Error(up.error);
+        SCENES.unshift({ name: s.name, prompt: s.prompt, file: up.name, ts: Date.now() });
+        saveScenes();
+        done++;
+      } catch (e) {
+        LOG('scene fail', s.name, e);
+        status('err', '场景「' + s.name + '」失败：' + e.message + '（继续下一个）');
+      }
+    }
+    jobEnd();
+    btn.disabled = false;
+    refreshSceneLib();
+    status('ok', '场景完成 ' + done + '/' + list.length + '，已存进场景库');
+  }
+
+  function waitKrea2(taskId) {
+    return new Promise(function (resolve, reject) {
+      const t0 = Date.now();
+      const timer = setInterval(async function () {
+        try {
+          const j = await jget('/api/krea2/history');
+          const job = (j.jobs || []).find(function (x) { return x.taskId === taskId; });
+          if (job && job.state === 'done' && job.files && job.files.length) { clearInterval(timer); resolve(job.files[0]); return; }
+          if (job && job.state === 'error') { clearInterval(timer); reject(new Error(job.error || 'Krea2 失败')); return; }
+          if (Date.now() - t0 > 600000) { clearInterval(timer); reject(new Error('Krea2 超时')); }
+        } catch (e) { /* 抖动继续 */ }
+      }, 5000);
+    });
+  }
+
+  function refreshSceneLib() {
+    const sel = $('#h3v-sceneLib');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = SCENES.length
+      ? SCENES.map(function (s, i) { return '<option value="' + i + '">' + esc(s.name) + ' · ' + esc(s.file || '') + '</option>'; }).join('')
+      : '<option value="">（场景库空）</option>';
+    if (cur !== '' && SCENES[Number(cur)]) sel.value = cur;
+    sceneLibPreview();
+  }
+
+  function sceneLibPreview() {
+    const sel = $('#h3v-sceneLib'), img = $('#h3v-sceneLibPv');
+    if (!sel || !img) return;
+    const s = SCENES[Number(sel.value)];
+    if (s && s.file) { img.src = api('/api/preview?type=input&filename=' + encodeURIComponent(s.file) + '&t=' + Date.now()); img.style.display = 'block'; }
+    else { img.removeAttribute('src'); img.style.display = 'none'; }
   }
 
   async function genSix() {
