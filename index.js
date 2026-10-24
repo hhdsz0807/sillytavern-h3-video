@@ -941,6 +941,8 @@
     s = s.replace(new RegExp('\\*\\*(' + names + ')\\*\\*:?', 'gi'), '$1:');
     s = s.replace(new RegExp('<(' + names + ')>:?', 'gi'), '$1:');
     s = s.replace(new RegExp('</(' + names + ')>', 'gi'), '');
+    // 段名单独成行、漏冒号 → 自动补齐
+    s = s.replace(new RegExp('^\\s*(' + names + ')\\s*$', 'gim'), '$1:');
     s = s.split('\n').filter(l => !/(选项|卡片|caption|字幕|界面|按钮|选择肢|option\s*(card|line|list|interface)|interface\s*(overlay|element|glow)|blinking cursor|tip text|subtitle|on-screen ui)/i.test(l)).join('\n');
     return dedupSections(s).trim();
   }
