@@ -387,6 +387,7 @@
       syncAiMode();
     }
     if ($('#h3v-cancelAI')) $('#h3v-cancelAI').onclick = function () {
+      STOP_ALL = true;
       try { if (ABORT) ABORT.abort(); } catch (_) {}
       jobEnd();
       pgSet(-1);
@@ -877,7 +878,10 @@
 
     let lastErr = null;
     let start = Number(S.cloudAccIdx || 0) % pool.length;
-    for (let round = 0; round < 3; round++) {
+    let round = 0;
+    for (;;) {
+      if (STOP_ALL) throw new Error('已取消');
+      round++;
       for (let k = 0; k < pool.length; k++) {
         const acc = pool[(start + k) % pool.length];
         try {
@@ -892,11 +896,11 @@
           await new Promise(function (r) { setTimeout(r, 1200); });
         }
       }
-      status('run', '账号都忙，' + (4 * (round + 1)) + ' 秒后重试（第 ' + (round + 1) + '/3 轮）…');
-      await new Promise(function (r) { setTimeout(r, 4000 * (round + 1)); });
+      const wait = Math.min(30000, 4000 * round);
+      status('run', '账号都忙（' + (lastErr && lastErr.message ? lastErr.message.slice(0, 40) : '并发已满') + '），' + Math.round(wait / 1000) + ' 秒后再试（第 ' + round + ' 轮，不会放弃）…');
+      await new Promise(function (r) { setTimeout(r, wait); });
       if (lastErr) start = (start + 1) % pool.length;
     }
-    throw new Error('账号重试 3 轮仍失败：' + (lastErr && lastErr.message ? lastErr.message : '未知'));
   }
 
   async function cloudVideoOnce(acc, opts) {
@@ -1119,7 +1123,13 @@
               break;
             } catch (e) {
               const m = String(e && e.message || '');
-              if (tries > 0 && /并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m)) { await sleep(5000); continue; }
+              if (/并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m) && !STOP_ALL) {
+                tries = (tries || 0) + 1;
+                const wait = Math.min(30000, 4000 * tries);
+                status('run', '第 ' + (i + 1) + ' 条并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
+                await sleep(wait);
+                continue;
+              }
               throw e;
             }
           }
@@ -1164,6 +1174,7 @@
     status('run', (JOB.label || '处理中') + ' · 累计 ' + (m ? m + ' 分 ' + s + ' 秒' : s + ' 秒') + '…');
   }
   function jobBegin(label) {
+    STOP_ALL = false;
     jobEnd();
     JOB.t0 = Date.now();
     JOB.label = label || '';
@@ -1635,6 +1646,7 @@
   }
 
   let ABORT = null;
+  let STOP_ALL = false;
   let MAXTOK_OVERRIDE = 0;
   let MAXTIMEOUT = 0;
 
@@ -2042,9 +2054,12 @@
         });
       } catch (e) {
         const msg = String(e && e.message || '');
-        if (tries > 0 && /并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg)) {
-          await new Promise(r => setTimeout(r, 4000));
-          return submitOne(s, tries - 1);
+        if (/并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg) && !STOP_ALL) {
+          tries = (tries || 0) + 1;
+          const wait = Math.min(30000, 3000 * tries);
+          status('run', '场景「' + s.name + '」并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
+          await new Promise(r => setTimeout(r, wait));
+          return submitOne(s, tries);
         }
         throw e;
       }
