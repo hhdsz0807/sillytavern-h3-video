@@ -1006,12 +1006,38 @@
     return VIDEOS.map(function (v, i) { return { v: v, i: i }; });
   }
 
+  async function loadVideosFromApk() {
+    try {
+      const j = await jget('/api/list');
+      const list = (j && (j.videos || j.files)) || [];
+      let added = 0;
+      list.forEach(function (v) {
+        const name = v && (v.name || v.filename);
+        if (!name || !/\.mp4$/i.test(name)) return;
+        if (VIDEOS.some(function (x) { return x.name === name; })) return;
+        VIDEOS.push({
+          name: name,
+          url: '/api/view?type=output&filename=' + encodeURIComponent(name),
+          label: '手机成片' + (v.mtime ? (' · ' + new Date(v.mtime).toLocaleString()) : ''),
+        });
+        added++;
+      });
+      renderOut();
+      status('ok', '已载入手机成片 ' + added + ' 条（目录里共 ' + list.length + ' 个）');
+    } catch (e) { status('err', '载入失败：' + e.message); }
+  }
+
   function renderOut() {
     const box = $('#h3v-out');
     if (!box) return;
     const pairs = shownVideos();
-    let head = '';
-    if (VIDEOS.length) {
+    let head = '<div class="row" style="margin:8px 0;flex-wrap:wrap">'
+      + '<button id="h3v-loadapk" style="flex:none">载入手机成片</button>'
+      + (pairs.length ? '<button id="h3v-merge" style="flex:none">合并成一条（' + pairs.length + '）</button>' : '')
+      + (RUN_TAG ? '<button id="h3v-onlyRun" style="flex:none">' + (ONLY_RUN ? '显示全部' : '只看本次 ' + RUN_TAG) + '</button>' : '')
+      + (VIDEOS.length ? '<button id="h3v-clear" style="flex:none">清空列表</button>' : '')
+      + '</div>';
+    if (false) {
       head = '<div class="row" style="margin:8px 0;flex-wrap:wrap">'
         + '<button id="h3v-merge" style="flex:none">合并成一条（' + pairs.length + '）</button>'
         + (RUN_TAG ? '<button id="h3v-onlyRun" style="flex:none">' + (ONLY_RUN ? '显示全部' : '只看本次 ' + RUN_TAG) + '</button>' : '')
@@ -1045,6 +1071,8 @@
     });
     const m = $('#h3v-merge');
     if (m) m.onclick = mergeAll;
+    const la = $('#h3v-loadapk');
+    if (la) la.onclick = loadVideosFromApk;
     const only = $('#h3v-onlyRun');
     if (only) only.onclick = function () { ONLY_RUN = !ONLY_RUN; renderOut(); };
     const c = $('#h3v-clear');
