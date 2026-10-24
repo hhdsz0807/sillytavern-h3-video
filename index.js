@@ -1693,30 +1693,30 @@
   }
   /* ---------- 本机 Agent（DSH Pocket） ---------- */
   function agentCfg() {
-    let raw = String(S.agentUrl || 'http://127.0.0.1:35869').trim();
-    let token = String(S.agentToken || S.agentPin || '');
-    // 允许直接粘 http://host:port/?token=xxx
-    const m = raw.match(/[?&]token=([^&#]+)/i);
-    if (m) { token = decodeURIComponent(m[1]); raw = raw.replace(/[?&]token=[^&#]+/i, ''); }
-    raw = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
-    return { base: raw, path: S.agentPath || '/api/chat', pin: token, token: token, url: raw + (S.agentPath || '/api/chat') };
+    // 直接粘贴整条地址：http://host:端口/?token=xxx（端口和 token 都会变）
+    const raw = String(S.agentUrl || '').trim();
+    const tokenM = raw.match(/[?&]token=([^&#]+)/i);
+    const token = tokenM ? decodeURIComponent(tokenM[1]) : String(S.agentPin || '');
+    let origin = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(origin)) origin = 'http://' + origin.replace(/^:+/, '');
+    const path = S.agentPath || '/api/chat';
+    let url = origin + path;
+    if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    return { raw: raw, origin: origin, token: token, path: path, url: url };
   }
 
   async function agentHttp(url, bodyStr, pinOverride) {
     const cfg = agentCfg();
     const headers = { 'Content-Type': 'application/json' };
-    const pin = (pinOverride === undefined) ? cfg.pin : pinOverride;
-    let full = url;
+    const pin = (pinOverride === undefined) ? cfg.token : pinOverride;
     if (pin) {
       headers['Authorization'] = 'Bearer ' + pin;
       headers['X-Token'] = pin;
       headers['X-Api-Key'] = pin;
-      headers['X-Pin'] = pin;
-      full = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(pin);
+      if (url.indexOf('token=') < 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(pin);
     }
     if (S.agentCookie) headers['Cookie'] = S.agentCookie;
-    const r = await jpost('/api/fetch', { url: full, method: 'POST', headers: headers, body: bodyStr });
-    return r;
+    return await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: bodyStr });
   }
 
   async function agentLogin() {
@@ -1790,24 +1790,23 @@
 
   async function agentProbe() {
     const cfg = agentCfg();
-    let loginInfo = '（未登录）';
-    try { const lg = await agentLogin(); if (lg) loginInfo = '登录成功：' + lg.path + (lg.token ? ' token' : '') + (lg.cookie ? ' cookie' : ''); } catch (e) { loginInfo = '登录失败：' + e.message; }
-    const cands = ['/api/chat', '/api/agent/chat', '/api/agent', '/api/message', '/api/send', '/api/complete',
-      '/api/completions', '/api/generate', '/v1/chat/completions', '/chat/completions', '/v1/completions',
-      '/api/session', '/api/sessions', '/api/status', '/api/health', '/api/ping', '/'];
+    const cands = ['/api/chat', '/api/agent/chat', '/api/agent', '/api/message', '/api/send', '/api/generate',
+      '/api/complete', '/api/completions', '/api/sessions', '/api/session', '/api/status', '/api/health',
+      '/v1/chat/completions', '/chat/completions', '/v1/completions', '/v1/models', '/api/models'];
     const lines = [];
     for (let i = 0; i < cands.length; i++) {
-      const url = cfg.base + cands[i];
+      const url = cfg.origin + cands[i] + (cfg.token ? ('?token=' + encodeURIComponent(cfg.token)) : '');
+      const body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], prompt: 'ping', max_tokens: 8 });
+      let post = '';
       try {
-        const r = await agentHttp(url, JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 8 }), cfg.pin);
-        const code = r && r.status ? r.status : (r && r.ok ? 200 : 'ERR');
-        const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 70);
-        lines.push(cands[i] + ' → ' + code + (code === 200 ? ' ✅ ' : ' ') + snip);
-      } catch (e) { lines.push(cands[i] + ' → ' + e.message.slice(0, 50)); }
+        const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token, 'X-Token': cfg.token }, body: body });
+        const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 60);
+        post = (r && r.status ? r.status : 'ERR') + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
+      } catch (e) { post = 'ERR ' + e.message.slice(0, 40); }
+      lines.push(cands[i] + ' → ' + post);
+      if (post.indexOf('✅') >= 0) break;
     }
-    const box = $('#h3v-agentState');
-    if (box) box.textContent = '探测完成，见状态区';
-    status('ok', 'Agent 探测：' + loginInfo + '\n' + lines.join('\n'));
+    status('ok', 'Agent 探测（' + cfg.origin + '，token ' + (cfg.token ? '已识别' : '未识别') + '）\n' + lines.join('\n'));
   }
 
   function callAI(sys, user, len) {
