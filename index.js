@@ -278,6 +278,30 @@
     $('#h3v-run').onclick = runVideo;
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
+    if ($('#h3v-presetSel')) {
+      renderPresetSel();
+      $('#h3v-presetSel').onchange = function () {
+        S.presetName = $('#h3v-presetSel').value || '';
+        PRESET_PROMPTS = null; saveS();
+        status('ok', S.presetName ? ('已切换补全预设：' + S.presetName) : '已改回当前预设');
+      };
+    }
+    if ($('#h3v-presetReload')) $('#h3v-presetReload').onclick = async function () {
+      OAI_CACHE = null; SETTINGS_RAW = null; PRESET_PROMPTS = null; PRESET_BAG_PATH = '';
+      status('run', '正在读取酒馆预设…');
+      await renderPresetSel();
+      const names = await getPresetNames();
+      if (names.length) {
+        status('ok', '预设 ' + names.length + ' 个：' + names.slice(0, 8).join(' / ') + (names.length > 8 ? ' …' : ''));
+      } else {
+        const roots = SETTINGS_RAW ? Object.keys(SETTINGS_RAW).slice(0, 12).join(', ') : '(没拿到设置)';
+        const keys = OAI_CACHE ? Object.keys(OAI_CACHE).slice(0, 12).join(', ') : '(空)';
+        const bag = [];
+        try { collectPresetBags(SETTINGS_RAW || {}, bag, 0); } catch (_) {}
+        const bagInfo = bag.length ? bag.map(function (x) { return x.path + '(' + x.names.length + ')'; }).join(' / ') : '无';
+        status('err', '没找到预设。\n根键：' + roots + '\noai 键：' + keys + '\n候选项：' + bagInfo);
+      }
+    };
     if ($('#h3v-accDo')) $('#h3v-accDo').onclick = accImportDo;
     if ($('#h3v-apiProf')) {
       renderApiProfiles();
@@ -1455,10 +1479,33 @@
       .map(function (k) { return k + '=' + (typeof ctx[k]); }).join(', ');
     const s = ctx.chatCompletionSettings || {};
     let pLen = 0;
-    try { pLen = ((await getPresetPrompts()) || '').length; } catch (_) {}
+    try { pLen = ((await getPresetPrompts(true)) || '').length; } catch (_) {}
+    let stInfo = '';
+    try {
+      const rr = await fetch('/api/settings/get', { method: 'POST', headers: stHeaders(), body: '{}' });
+      stInfo = 'settings/get HTTP ' + rr.status;
+      const jj = await rr.json();
+      const roots = Object.keys(jj || {}).slice(0, 10).join(', ');
+      const oai = jj.oai_settings || {};
+      const oaiKeys = Object.keys(oai).slice(0, 14).join(', ');
+      const bags = [];
+      (function scan(o, d, path) {
+        if (!o || typeof o !== 'object' || d > 3) return;
+        Object.keys(o).forEach(function (k) {
+          const v = o[k];
+          if (/preset/i.test(k) && v && typeof v === 'object' && !Array.isArray(v)) {
+            const nm = Object.keys(v).filter(function (n) { return v[n] && typeof v[n] === 'object'; });
+            if (nm.length) bags.push(path + k + '(' + nm.length + '): ' + nm.slice(0, 4).join('/'));
+          }
+          if (v && typeof v === 'object' && !Array.isArray(v)) scan(v, d + 1, path + k + '.');
+        });
+      })(jj, 0, '');
+      stInfo += '\n根键：' + roots + '\noai 键：' + oaiKeys + '\n预设对象：' + (bags.length ? bags.slice(0, 4).join(' | ') : '无');
+    } catch (e) { stInfo = 'settings/get 失败：' + e.message; }
     status('ok', 'ST API：' + fns
       + '\n连接源=' + (s.chat_completion_source || '?') + ' 模型=' + (s.openai_model || s.claude_model || s.custom_model || '?')
       + '\n预设提示词：' + (pLen ? (pLen + ' 字（会附加到每次请求）') : '0 字（没读到 / 已关闭）')
+      + '\n' + stInfo
       + '\n(ctx 可用项 ' + Object.keys(ctx).length + ' 个)');
   }
 
