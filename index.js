@@ -238,6 +238,11 @@
 
         <div id="h3v-out"></div>
 
+        <div class="row" style="margin-top:10px;flex-wrap:wrap">
+          <button id="h3v-loadapk2" style="flex:none">载入手机成片</button>
+          <button id="h3v-merge2" style="flex:none">合并本页成片</button>
+          <span class="hint" id="h3v-outHint"></span>
+        </div>
         <div class="row" style="margin-top:14px"><button class="close" id="h3v-x2" style="flex:1">关闭面板</button></div>
       </div>
 
@@ -429,6 +434,8 @@
     if ($('#h3v-audUp')) $('#h3v-audUp').onclick = uploadAudioLib;
     renderAudioLib();
     try { renderOut(); } catch (_) {}
+    if ($('#h3v-loadapk2')) $('#h3v-loadapk2').onclick = loadVideosFromApk;
+    if ($('#h3v-merge2')) $('#h3v-merge2').onclick = function () { renderOut(); mergeAll(); };
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
     renderCharList();
