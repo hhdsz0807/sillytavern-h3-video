@@ -1372,13 +1372,55 @@
   const SEGIMG = {};   // { blockIndex: [file, ...] }
   const SEGCAST = {};  // { blockIndex: {cast:[names], scene:'name'} }
 
+  function charAudioByName(name) {
+    if (!name) return '';
+    const want = String(name).replace(/\s+/g, '');
+    for (let i = 0; i < CHARLIB.length; i++) {
+      const nm = String(CHARLIB[i].name || '').replace(/\s+/g, '');
+      if (!nm) continue;
+      if (nm === want || want.includes(nm) || nm.includes(want)) {
+        return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
+      }
+    }
+    return '';
+  }
+
+  // 有音色的角色：在 subject_definitions 末尾补 <Audio N> is the voice-timbre reference for <Subject N>.
+  function ensureAudioTags(block, cast) {
+    let s = String(block || '');
+    const names = (cast && cast.cast) ? cast.cast : [];
+    if (!names.length) return s;
+    const tags = [];
+    for (let k = 0; k < names.length && tags.length < 3; k++) {
+      if (!charAudioByName(names[k])) continue;
+      const n = k + 1;
+      if (new RegExp('<Audio\\s*' + n + '\\b', 'i').test(s)) continue;
+      tags.push('<Audio ' + n + '> is the voice-timbre reference for <Subject ' + n + '>.');
+    }
+    if (!tags.length) return s;
+    const lines = s.split('\n');
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*summary\s*:/i.test(lines[i])) { idx = i; break; }
+    }
+    if (idx < 0) return s;
+    lines.splice(idx, 0, tags.join('\n'));
+    return lines.join('\n');
+  }
+
   function buildAssetList() {
     const chars = CHARLIB.map(function (c) { return String(c.name || '').trim(); }).filter(Boolean);
     const scenes = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
+    const voiced = [];
+    for (let i = 0; i < CHARLIB.length; i++) {
+      const a = (Array.isArray(S.charAudio) ? S.charAudio[i] : '');
+      if (a && CHARLIB[i].name) voiced.push(CHARLIB[i].name);
+    }
     let text = '';
     if (chars.length) text += '可用角色（CAST 里只能照抄这些名字）：\n' + chars.map(function (c) { return '- ' + c; }).join('\n') + '\n';
     if (scenes.length) text += '可用场景（SCENE 里只能照抄这些名字）：\n' + scenes.map(function (c) { return '- ' + c; }).join('\n') + '\n';
-    if (!text) text = '（素材清单为空：请先在视频弹窗里给角色槽填名字、并生成场景库）\n';
+    if (voiced.length) text += '可用音色（<Audio N> 必须按角色出现顺序对应）：\n' + voiced.map(function (c, i) { return '- ' + c + ' → <Audio ' + (i + 1) + '>'; }).join('\n') + '\n';
+    if (!text) text = '（素材清单为空：请先在视频弹窗里填角色名字、并生成场景库）\n';
     return { chars: chars, scenes: scenes, text: text };
   }
 
@@ -1716,7 +1758,8 @@
       let s = String(b || '');
       const cast = parseCastLine(s);
       if (cast) s = s.replace(cast.raw, '').trim();
-      const nb = normalizeBlock(s);
+      let nb = normalizeBlock(s);
+      nb = ensureAudioTags(nb, cast);
       if (cast) {
         SEGCAST[i] = cast;
         const files = [];
@@ -1791,7 +1834,8 @@
         if (b) {
           const cast = parseCastLine(b);
           if (cast) { b = b.replace(cast.raw, '').trim(); }
-          const nb = normalizeBlock(b);
+          let nb = normalizeBlock(b);
+          nb = ensureAudioTags(nb, cast);
           blocks.push(nb); lastBlock = nb;
           if (cast) {
             const idx2 = blocks.length - 1;
