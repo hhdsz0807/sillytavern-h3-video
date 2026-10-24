@@ -2034,20 +2034,30 @@
     try { j = JSON.parse(raw); } catch (e) { status('err', 'JSON 解析失败：' + e.message); return; }
     const list = Array.isArray(j) ? j : (j.accounts || []);
     if (!list.length) { status('err', '这份数据里没有账号'); return; }
+    // 先存浏览器本地（云端直连用得到，不依赖 APK 版本）
+    S.cloudAccounts = list.slice();
+    if (S.cloudAccIdx == null) S.cloudAccIdx = 0;
+    saveS();
+    if ($('#h3v-accJson')) { $('#h3v-accJson').value = ''; }
+    if ($('#h3v-accBox')) { $('#h3v-accBox').style.display = 'none'; }
+
     try {
       const r = await jpost('/api/accounts/import', {
         accounts: list,
         mode: ($('#h3v-accReplace') && $('#h3v-accReplace').checked) ? 'replace' : 'merge',
       });
       if (!r.ok) throw new Error(r.error || '导入失败');
-      S.cloudAccounts = list.slice();
-      if (S.cloudAccIdx == null) S.cloudAccIdx = 0;
-      saveS();
-      $('#h3v-accBox').style.display = 'none';
-      $('#h3v-accJson').value = '';
-      status('ok', '导入完成：新增 ' + r.added + '，跳过重复 ' + r.skipped + '，现在共 ' + r.total + ' 个账号');
-      if ($('#h3v-accState')) $('#h3v-accState').textContent = '共 ' + r.total + ' 个账号';
-    } catch (e) { status('err', '导入失败：' + e.message); }
+      status('ok', '导入完成：本地 ' + list.length + ' 个，手机端新增 ' + r.added + '，共 ' + r.total + ' 个');
+      if ($('#h3v-accState')) $('#h3v-accState').textContent = '本地 ' + list.length + ' 个 · 手机 ' + r.total + ' 个';
+    } catch (e) {
+      const msg = String(e && e.message || '');
+      if (/未知接口|404|not found/i.test(msg)) {
+        status('ok', '账号已导入浏览器本地（' + list.length + ' 个），云端直连可用。手机 APK 是旧版没有导入接口，要同步请装 v86+。');
+        if ($('#h3v-accState')) $('#h3v-accState').textContent = '本地 ' + list.length + ' 个（手机未同步）';
+      } else {
+        status('err', '手机端同步失败：' + msg + '（本地已存 ' + list.length + ' 个）');
+      }
+    }
   }
 
   function apiProfiles() {
