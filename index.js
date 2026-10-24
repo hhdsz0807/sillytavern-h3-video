@@ -1940,8 +1940,14 @@
   function cardTag() {
     try {
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
+      const cands = [];
       const ch = ctx && ctx.characters && ctx.characters[ctx.characterId];
-      const id = ch && (ch.avatar || ch.name);
+      if (ch) { cands.push(ch.avatar); cands.push(ch.name); }
+      if (ctx && ctx.name2) cands.push(ctx.name2);
+      if (ctx && ctx.character) { cands.push(ctx.character.avatar); cands.push(ctx.character.name); }
+      if (ctx && ctx.chatMetadata && ctx.chatMetadata.character_name) cands.push(ctx.chatMetadata.character_name);
+      let id = '';
+      for (let i = 0; i < cands.length; i++) { if (cands[i] && String(cands[i]).trim()) { id = cands[i]; break; } }
       return String(id || 'default').replace(/[^\w\-.\u4e00-\u9fa5]/g, '_');
     } catch (_) { return 'default'; }
   }
@@ -1967,6 +1973,7 @@
     const tag = cardTag();
     if (!force && tag === CURCARD_TAG) return;
     CURCARD_TAG = tag;
+    try { const h = $('#h3v-charHint'); if (h) h.textContent = '当前角色卡：' + tag + '（三个库按卡隔离）'; } catch (_) {}
     SCENES = loadLib('h3v.scenes');
     CHARLIB = loadLib('h3v.chars');
     AUDIOLIB = loadLib('h3v.audios');
@@ -3183,13 +3190,16 @@ non_diegetic_music:
       ensureUI();
       attachMessageButtons();
       window.addEventListener('error', (ev) => {
+        const src = String((ev && (ev.filename || '')) || '');
+        const msg = String((ev && ev.message) || '');
+        if (src.indexOf('sillytavern-h3-video') < 0 && msg.indexOf('h3v') < 0) return;  // 别的扩展/酒馆自身的报错不打扰
         const el = $('#h3v-status');
-        if (el) { el.className = 'on err'; el.textContent = '脚本错误：' + (ev && ev.message ? ev.message : ev); }
+        if (el) { el.className = 'on err'; el.textContent = '脚本错误：' + msg; }
       });
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
       if (ctx && ctx.eventSource && ctx.eventTypes) {
         ctx.eventSource.on(ctx.eventTypes.MESSAGE_RENDERED, () => setTimeout(attachMessageButtons, 120));
-        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => { setTimeout(attachMessageButtons, 300); setTimeout(() => applyInjection(false), 400); });
+        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => { setTimeout(attachMessageButtons, 300); setTimeout(function () { try { reloadLibsIfCardChanged(true); } catch (_) {} }, 400); setTimeout(() => applyInjection(false), 400); });
       }
       applyInjection(false);
       const chat = document.getElementById('chat');
