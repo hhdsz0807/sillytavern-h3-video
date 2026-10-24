@@ -141,6 +141,7 @@
             <option value="api">自定义 API</option>
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
+          <button id="h3v-cancelAI" style="flex:none">取消</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
@@ -153,7 +154,7 @@
           </div>
           <div class="row"><label>max_tokens</label>
             <input type="text" id="h3v-maxtok" value="100000" style="max-width:120px;flex:none" placeholder="100000">
-            <span class="hint">默认 10 万；服务端嫌大时会自动退到 8192 重试</span>
+            <span class="hint">默认 10 万；中转卡住的话改 8000（10 万会让它憋很久）</span>
           </div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePreset" checked> 套用预设采样参数（温度/top_p/惩罚/stop/seed）</label></div>
           <div class="row"><label style="min-width:auto"><input type="checkbox" id="h3v-usePresetPrompt" checked> 把预设里的提示词也作为参考带上</label></div>
@@ -273,6 +274,11 @@
       if (S.aiModel) $('#h3v-aiModel').innerHTML = `<option value="${esc(S.aiModel)}">${esc(S.aiModel)}</option>`;
       syncAiMode();
     }
+    if ($('#h3v-cancelAI')) $('#h3v-cancelAI').onclick = function () {
+      try { if (ABORT) ABORT.abort(); } catch (_) {}
+      jobEnd();
+      status('err', '已取消本次 AI 请求');
+    };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
     if ($('#h3v-sceneStyle')) {
@@ -1020,7 +1026,10 @@
     return Array.from(new Set(out));
   }
 
+  let ABORT = null;
+
   async function postJSON(urls, key, bodyObj, label) {
+    const signal = ABORT ? ABORT.signal : undefined;
     let lastErr = null;
     for (const u of urls) {
       try {
@@ -1028,7 +1037,7 @@
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
           body: JSON.stringify(bodyObj),
-        }), 90000, label + ' ');
+        }), 60000, label + ' ');
         const txt = await r.text();
         if (!r.ok) { lastErr = new Error(u + ' → HTTP ' + r.status + '：' + txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 140)); continue; }
         let j = null; try { j = JSON.parse(txt); } catch (_) { lastErr = new Error(u + ' → 不是 JSON：' + txt.slice(0, 120)); continue; }
@@ -1079,6 +1088,7 @@
   }
 
   async function apiGenerate(sys, user, len) {
+    ABORT = new AbortController();
     const base = (S.aiBase || '').trim();
     const key = (S.aiKey || '').trim();
     const model = (S.aiModel || '').trim();
@@ -1091,6 +1101,7 @@
     }, params);
     let maxTok = Number(S.maxTokens || 100000);
     for (let attempt = 0; attempt < 2; attempt++) {
+      jobLabel('调自定义 API · 第 ' + (attempt + 1) + '/2 次（max_tokens ' + maxTok + '）');
       const body = Object.assign({}, bodyObj, { max_tokens: maxTok });
       if (attempt > 0) {
         // 推理模型常常把 token 全花在 reasoning 上，第二次强制“只给结果”
