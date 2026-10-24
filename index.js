@@ -459,7 +459,7 @@
   async function jpost(path, body) {
     const r = await withTimeout(fetch(api(path), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
-    }), 30000, '提交 ');
+    }), 90000, '提交 ');
     const t = await r.text();
     let j = {}; try { j = JSON.parse(t); } catch (_) { throw new Error('返回不是 JSON：' + t.slice(0, 120)); }
     if (j.error) throw new Error(j.error);
@@ -1465,7 +1465,7 @@
         });
       } catch (e) {
         const msg = String(e && e.message || '');
-        if (tries > 0 && /并发|busy|并发已满|RUNNING/i.test(msg)) {
+        if (tries > 0 && /并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch/i.test(msg)) {
           await new Promise(r => setTimeout(r, 4000));
           return submitOne(s, tries - 1);
         }
