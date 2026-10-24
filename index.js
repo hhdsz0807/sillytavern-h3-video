@@ -1697,6 +1697,7 @@
       }
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\[\/H3\]\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
+            saveBlocks(CURMESID, $('#h3v-prompt').value);
       refreshBlockList();
       pgSet(100);
       status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
