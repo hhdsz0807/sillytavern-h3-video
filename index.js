@@ -302,7 +302,7 @@
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
     if ($('#h3v-agentUrl')) {
-      #h3v-agentUrl.value = S.agentUrl || 'http://127.0.0.1:35869';
+      $('#h3v-agentUrl').value = S.agentUrl || 'http://127.0.0.1:35869';
       $('#h3v-agentPath').value = S.agentPath || '/api/chat';
       $('#h3v-agentPin').value = S.agentPin || '';
       $('#h3v-agentUrl').onchange = function () { S.agentUrl = $('#h3v-agentUrl').value.trim(); saveS(); };
