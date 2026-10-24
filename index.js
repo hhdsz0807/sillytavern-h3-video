@@ -539,9 +539,8 @@
 
   function charAudioFor(file) {
     if (!file) return '';
-    for (let i = 0; i < 6; i++) {
-      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-      if (sel && sel.value === file) return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
+    for (let i = 0; i < CHARLIB.length; i++) {
+      if (CHARLIB[i].file === file) return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
     }
     return '';
   }
@@ -1325,13 +1324,7 @@
   const SEGCAST = {};  // { blockIndex: {cast:[names], scene:'name'} }
 
   function buildAssetList() {
-    const chars = [];
-    const names = Array.isArray(S.charNames) ? S.charNames : [];
-    for (let i = 0; i < 6; i++) {
-      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-      const nm = (names[i] || '').trim();
-      if (sel && sel.value && nm) chars.push(nm);
-    }
+    const chars = CHARLIB.map(function (c) { return String(c.name || '').trim(); }).filter(Boolean);
     const scenes = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
     let text = '';
     if (chars.length) text += '可用角色（CAST 里只能照抄这些名字）：\n' + chars.map(function (c) { return '- ' + c; }).join('\n') + '\n';
@@ -1343,13 +1336,9 @@
   function resolveChar(name) {
     if (!name) return '';
     const want = String(name).replace(/\s+/g, '');
-    const names = Array.isArray(S.charNames) ? S.charNames : [];
-    for (let i = 0; i < 6; i++) {
-      const nm = (names[i] || '').replace(/\s+/g, '');
-      if (nm && (nm === want || want.includes(nm) || nm.includes(want))) {
-        const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-        if (sel && sel.value) return sel.value;
-      }
+    for (let i = 0; i < CHARLIB.length; i++) {
+      const nm = String(CHARLIB[i].name || '').replace(/\s+/g, '');
+      if (nm && (nm === want || want.includes(nm) || nm.includes(want))) return CHARLIB[i].file;
     }
     return '';
   }
@@ -1377,6 +1366,12 @@
   }
 
   /* ---------- 角色库 / 场景库界面 ---------- */
+  /* ---------- 角色库（独立持久化，不依赖下拉框） ---------- */
+  const CHARLIB = (function () {
+    try { const a = JSON.parse(localStorage.getItem('h3v.chars') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
+  })();
+  const saveChars = function () { try { localStorage.setItem('h3v.chars', JSON.stringify(CHARLIB)); } catch (_) {} };
+
   function thumbUrl(file) {
     return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
   }
@@ -1384,35 +1379,27 @@
   function renderCharList() {
     const box = $('#h3v-charList');
     if (!box) return;
+    const sum = $('#h3v-charSum');
+    if (sum) sum.textContent = '角色库（' + CHARLIB.length + ' 张，点开）';
+    if (!CHARLIB.length) { box.innerHTML = '<div class="hint">还没有角色图，点上面「+ 上传角色图」</div>'; return; }
     let html = '';
-    for (let i = 0; i < 6; i++) {
-      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-      const file = sel ? sel.value : '';
-      if (!file) continue;
+    CHARLIB.forEach(function (c, i) {
       html += '<div class="row">' +
-        '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(file) + '">' +
-        '<input data-cn="' + i + '" value="' + esc(S.charNames[i] || '') + '" placeholder="角色名（中文）" style="flex:1">' +
+        '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(c.file) + '">' +
+        '<input data-cn="' + i + '" value="' + esc(c.name || '') + '" placeholder="角色名（中文）" style="flex:1">' +
         '<select data-ca="' + i + '" style="max-width:130px;flex:none"></select>' +
         '<button data-cdel="' + i + '" style="flex:none">删</button></div>';
-    }
-    box.innerHTML = html || '<div class="hint">还没有角色图，点上面「+ 上传角色图」</div>';
-    const sum = $('#h3v-charSum');
-    if (sum) sum.textContent = '角色库（' + (html ? html.split('data-cn=').length - 1 : 0) + ' 张，点开）';
-    fillCharAudioSelects();
+    });
+    box.innerHTML = html;
     box.querySelectorAll('input[data-cn]').forEach(function (el) {
       const i = Number(el.dataset.cn);
-      el.oninput = function () { S.charNames[i] = el.value.trim(); saveS(); };
+      el.oninput = function () { CHARLIB[i].name = el.value.trim(); saveChars(); };
     });
     box.querySelectorAll('button[data-cdel]').forEach(function (el) {
       const i = Number(el.dataset.cdel);
-      el.onclick = function () {
-        const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-        if (sel) sel.value = '';
-        S.charNames[i] = '';
-        saveS();
-        renderCharList();
-      };
+      el.onclick = function () { CHARLIB.splice(i, 1); saveChars(); renderCharList(); };
     });
+    fillCharAudioSelects();
   }
 
   function renderSceneListBox() {
@@ -1470,25 +1457,15 @@
     inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
     inp.onchange = async function () {
       const files = Array.from(inp.files || []);
-      if (!files.length) return;
       for (let k = 0; k < files.length; k++) {
         const f = files[k];
         try {
           status('run', '上传角色图 ' + (k + 1) + '/' + files.length + '…');
           const j = await uploadOne(f);
           if (j.error) throw new Error(j.error);
-          await loadMeta();
-          let slot = -1;
-          for (let i = 0; i < 6; i++) {
-            const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
-            if (sel && !sel.value) { slot = i; break; }
-          }
-          if (slot < 0) { status('err', '角色库最多 6 张'); break; }
-          const sel = document.querySelector('#h3v-views select[data-v="' + slot + '"]');
-          sel.value = j.name;
-          if (!Array.isArray(S.charNames)) S.charNames = ['', '', '', '', '', ''];
-          if (!S.charNames[slot]) S.charNames[slot] = f.name.replace(/\.[^.]+$/, '');
-          saveS();
+          if (CHARLIB.length >= 6) { status('err', '角色库最多 6 张'); break; }
+          CHARLIB.push({ file: j.name, name: f.name.replace(/\.[^.]+$/, '') });
+          saveChars();
           renderCharList();
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
@@ -1532,14 +1509,25 @@
     if (!AUDIOLIB.length) { box.innerHTML = '<div class="hint">还没有音频</div>'; return; }
     let html = '';
     AUDIOLIB.forEach(function (a, i) {
-      html += '<div class="row"><input data-an="' + i + '" value="' + esc(a.name || '') + '" placeholder="音色名（如：男主）" style="flex:1">' +
-        '<span class="hint">' + esc(a.file || '') + '</span>' +
-        '<button data-adel="' + i + '" style="flex:none">删</button></div>';
+      html += '<div class="row">' +
+        '<input data-an="' + i + '" value="' + esc(a.name || '') + '" placeholder="音色名（如：男主）" style="flex:1">' +
+        '<button data-aplay="' + i + '" style="flex:none">试听</button>' +
+        '<button data-adel="' + i + '" style="flex:none">删</button></div>' +
+        '<div class="hint" style="margin:-4px 0 8px 68px">文件：' + esc(a.file || '(空)') + '</div>';
     });
     box.innerHTML = html;
     box.querySelectorAll('input[data-an]').forEach(function (el) {
       const i = Number(el.dataset.an);
       el.oninput = function () { AUDIOLIB[i].name = el.value.trim(); saveAudios(); fillCharAudioSelects(); };
+    });
+    box.querySelectorAll('button[data-aplay]').forEach(function (el) {
+      const i = Number(el.dataset.aplay);
+      el.onclick = function () {
+        const a = AUDIOLIB[i];
+        if (!a || !a.file) return;
+        const url = api('/api/preview?type=input&filename=' + encodeURIComponent(a.file) + '&t=' + Date.now());
+        try { new Audio(url).play(); status('ok', '试听：' + (a.name || a.file)); } catch (e) { status('err', '这个浏览器不支持内联播放'); }
+      };
     });
     box.querySelectorAll('button[data-adel]').forEach(function (el) {
       const i = Number(el.dataset.adel);
@@ -1553,6 +1541,7 @@
     if (!box) return;
     box.querySelectorAll('select[data-ca]').forEach(function (sel) {
       const i = Number(sel.dataset.ca);
+      if (!CHARLIB[i]) return;
       const cur = (Array.isArray(S.charAudio) ? S.charAudio[i] : '') || '';
       sel.innerHTML = '<option value="">音色：无</option>' + AUDIOLIB.map(function (a) {
         return '<option value="' + esc(a.file) + '">' + esc(a.name || a.file) + '</option>';
