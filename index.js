@@ -305,9 +305,9 @@
       $('#h3v-agentUrl').value = S.agentUrl || 'http://127.0.0.1:35869';
       $('#h3v-agentPath').value = S.agentPath || '/api/chat';
       $('#h3v-agentPin').value = S.agentPin || '';
-      $('#h3v-agentUrl').onchange = function () { S.agentUrl = $('#h3v-agentUrl').value.trim(); saveS(); };
+      $('#h3v-agentUrl').oninput = function () { S.agentUrl = $('#h3v-agentUrl').value.trim(); saveS(); };
       $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/api/chat'; saveS(); };
-      $('#h3v-agentPin').onchange = function () { S.agentPin = $('#h3v-agentPin').value.trim(); saveS(); };
+      $('#h3v-agentPin').oninput = function () { S.agentPin = $('#h3v-agentPin').value.trim(); saveS(); };
     }
     if ($('#h3v-agentProbe')) $('#h3v-agentProbe').onclick = agentProbe;
     if ($('#h3v-presetSel')) {
@@ -1694,12 +1694,15 @@
   /* ---------- 本机 Agent（DSH Pocket） ---------- */
   function agentCfg() {
     // 直接粘贴整条地址：http://host:端口/?token=xxx（端口和 token 都会变）
-    const raw = String(S.agentUrl || '').trim();
+    const elUrl = $('#h3v-agentUrl');
+    const elPath = $('#h3v-agentPath');
+    const elPin = $('#h3v-agentPin');
+    const raw = String((elUrl && elUrl.value) || S.agentUrl || '').trim();
     const tokenM = raw.match(/[?&]token=([^&#]+)/i);
-    const token = tokenM ? decodeURIComponent(tokenM[1]) : String(S.agentPin || '');
+    const token = tokenM ? decodeURIComponent(tokenM[1]) : String((elPin && elPin.value) || S.agentPin || '');
     let origin = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
     if (!/^https?:\/\//i.test(origin)) origin = 'http://' + origin.replace(/^:+/, '');
-    const path = S.agentPath || '/api/chat';
+    const path = String((elPath && elPath.value) || S.agentPath || '/api/chat').trim() || '/api/chat';
     let url = origin + path;
     if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
     return { raw: raw, origin: origin, token: token, path: path, url: url };
@@ -1789,6 +1792,7 @@
   }
 
   async function agentProbe() {
+    if (!agentCfg().raw) { status('err', '先在「Agent 地址」里粘贴完整地址（含 ?token=）'); return; }
     const cfg = agentCfg();
     const log = [];
 
