@@ -1325,12 +1325,13 @@
   /* ---------- 酒馆「对话补全预设」里的提示词 ---------- */
   let PRESET_PROMPTS = null;
   let OAI_CACHE = null;
-
+  let SETTINGS_RAW = null;
   async function getOaiSettings(force) {
     if (OAI_CACHE && !force) return OAI_CACHE;
     try {
       const r = await withTimeout(fetch('/api/settings/get', { method: 'POST', headers: stHeaders(), body: '{}' }), 15000, '读酒馆设置 ');
       const j = await r.json();
+      SETTINGS_RAW = j || {};
       OAI_CACHE = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
     } catch (e) { LOG('oai settings fail', e); OAI_CACHE = {}; }
     return OAI_CACHE;
@@ -1345,17 +1346,57 @@
     sel.value = S.presetName || '';
   }
 
+  function looksLikePreset(v) {
+    return v && typeof v === 'object' && !Array.isArray(v) &&
+      ('temperature' in v || 'top_p' in v || 'prompts' in v || 'prompt_order' in v || 'max_tokens' in v);
+  }
+
+  function collectPresetBags(root, out, depth) {
+    if (!root || typeof root !== 'object' || depth > 3) return;
+    Object.keys(root).forEach(function (k) {
+      const v = root[k];
+      if (/preset/i.test(k) && v && typeof v === 'object' && !Array.isArray(v)) {
+        const names = Object.keys(v).filter(function (n) { return looksLikePreset(v[n]); });
+        if (names.length) out.push({ path: k, names: names });
+      }
+      if (v && typeof v === 'object' && !Array.isArray(v)) collectPresetBags(v, out, depth + 1);
+    });
+  }
+
   async function getPresetNames() {
     const oai = await getOaiSettings();
-    const bag = oai.preset_settings_openai || oai.presets || {};
-    return Object.keys(bag || {}).sort();
+    let bag = oai.preset_settings_openai || oai.presets || null;
+    let names = bag ? Object.keys(bag) : [];
+
+    if (!names.length) {
+      // 兜底：在整份设置里找「像预设」的对象
+      const found = [];
+      try { collectPresetBags(SETTINGS_RAW || OAI_CACHE || {}, found, 0); } catch (_) {}
+      if (found.length) {
+        found.sort(function (a, b) { return b.names.length - a.names.length; });
+        names = found[0].names;
+        PRESET_BAG_PATH = found[0].path;
+      }
+    }
+    return names.sort();
   }
+
+  let PRESET_BAG_PATH = '';
 
   function pickPreset(oai) {
     const name = S.presetName;
     if (!name) return null;
-    const bag = oai.preset_settings_openai || oai.presets || {};
-    return bag[name] || null;
+    let bag = oai.preset_settings_openai || oai.presets || null;
+    if (!bag && PRESET_BAG_PATH && SETTINGS_RAW) {
+      try { bag = SETTINGS_RAW[PRESET_BAG_PATH] || null; } catch (_) {}
+      if (!bag && OAI_CACHE) { try { bag = OAI_CACHE[PRESET_BAG_PATH] || null; } catch (_) {} }
+    }
+    if (!bag) {
+      const found = [];
+      try { collectPresetBags(OAI_CACHE || {}, found, 0); } catch (_) {}
+      if (found.length) bag = (SETTINGS_RAW || OAI_CACHE || {})[found[0].path];
+    }
+    return bag ? (bag[name] || null) : null;
   }
 
   async function getPresetPrompts(force) {
