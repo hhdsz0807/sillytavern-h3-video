@@ -158,7 +158,12 @@
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
-                <div class="row"><label>H3账号</label>
+                        <div class="row"><label>补全预设</label>
+          <select id="h3v-presetSel" style="flex:1;max-width:280px"></select>
+          <button id="h3v-presetReload" style="flex:none">刷新列表</button>
+        </div>
+
+        <div class="row"><label>H3账号</label>
           <button id="h3v-accExport" style="flex:none">导出账号</button>
           <button id="h3v-accImport" style="flex:none">导入账号</button>
           <span class="hint" id="h3v-accState">从 H3工作台 账号页导出的 JSON 可以直接贴进来</span>
@@ -1319,19 +1324,53 @@
 
   /* ---------- 酒馆「对话补全预设」里的提示词 ---------- */
   let PRESET_PROMPTS = null;
-  async function getPresetPrompts() {
-    if (PRESET_PROMPTS !== null) return PRESET_PROMPTS;
+  let OAI_CACHE = null;
+
+  async function getOaiSettings(force) {
+    if (OAI_CACHE && !force) return OAI_CACHE;
     try {
       const r = await withTimeout(fetch('/api/settings/get', { method: 'POST', headers: stHeaders(), body: '{}' }), 15000, '读酒馆设置 ');
       const j = await r.json();
-      const oai = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
-      const prompts = Array.isArray(oai.prompts) ? oai.prompts : [];
+      OAI_CACHE = j.oai_settings || (j.settings && j.settings.oai_settings) || {};
+    } catch (e) { LOG('oai settings fail', e); OAI_CACHE = {}; }
+    return OAI_CACHE;
+  }
+
+  async function renderPresetSel() {
+    const sel = $('#h3v-presetSel');
+    if (!sel) return;
+    const names = await getPresetNames();
+    sel.innerHTML = '<option value="">（用酒馆当前预设）</option>' +
+      names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    sel.value = S.presetName || '';
+  }
+
+  async function getPresetNames() {
+    const oai = await getOaiSettings();
+    const bag = oai.preset_settings_openai || oai.presets || {};
+    return Object.keys(bag || {}).sort();
+  }
+
+  function pickPreset(oai) {
+    const name = S.presetName;
+    if (!name) return null;
+    const bag = oai.preset_settings_openai || oai.presets || {};
+    return bag[name] || null;
+  }
+
+  async function getPresetPrompts(force) {
+    if (PRESET_PROMPTS !== null) return PRESET_PROMPTS;
+    try {
+      const oai = await getOaiSettings(force);
+      const pre = pickPreset(oai);
+      const prompts = Array.isArray((pre && pre.prompts) || oai.prompts) ? ((pre && pre.prompts) || oai.prompts) : [];
       const byId = {};
       prompts.forEach(p => { if (p && p.identifier) byId[p.identifier] = p; });
 
       // 找到当前预设对应的 prompt_order（100001 = 预设级，100000 = 全局）
       let order = [];
-      const po = Array.isArray(oai.prompt_order) ? oai.prompt_order : [];
+      const poSrc = (pre && Array.isArray(pre.prompt_order)) ? pre.prompt_order : (Array.isArray(oai.prompt_order) ? oai.prompt_order : []);
+      const po = poSrc;
       const pick = po.find(x => x && x.character_id === 100001) || po.find(x => x && x.character_id === 100000);
       if (pick && Array.isArray(pick.order)) order = pick.order;
 
@@ -1387,7 +1426,11 @@
     const out = {};
     try {
       const ctx = window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
-      const s = (ctx && ctx.chatCompletionSettings) || {};
+      let s = (ctx && ctx.chatCompletionSettings) || {};
+      if (S.presetName && OAI_CACHE) {
+        const bag = OAI_CACHE.preset_settings_openai || OAI_CACHE.presets || {};
+        if (bag[S.presetName]) s = bag[S.presetName];
+      }
       if (s.temperature != null) out.temperature = s.temperature;
       if (s.top_p != null && s.top_p !== 0) out.top_p = s.top_p;
       if (s.presence_penalty != null) out.presence_penalty = s.presence_penalty;
