@@ -428,6 +428,7 @@
     }
     if ($('#h3v-audUp')) $('#h3v-audUp').onclick = uploadAudioLib;
     renderAudioLib();
+    try { renderOut(); } catch (_) {}
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
     renderCharList();
