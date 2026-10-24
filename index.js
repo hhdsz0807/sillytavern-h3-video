@@ -862,6 +862,24 @@
     return fn;
   }
 
+  /* ---------- 并发闸门：满了排队，完成一个补一个 ---------- */
+  const SEM = { cap: 0, used: 0, q: [] };
+  function semCap() {
+    const pool = cloudAccPool();
+    const sum = pool.reduce(function (a, c) { return a + Math.max(1, Number(c.maxConc || c.conc || 1)); }, 0);
+    return Math.max(1, sum || 1);
+  }
+  function semAcquire() {
+    const cap = semCap();
+    SEM.cap = cap;
+    if (SEM.used < cap) { SEM.used++; return Promise.resolve(); }
+    return new Promise(function (res) { SEM.q.push(res); });
+  }
+  function semRelease() {
+    if (SEM.q.length) { const next = SEM.q.shift(); next(); return; }
+    SEM.used = Math.max(0, SEM.used - 1);
+  }
+
   function cloudAccPool() {
     const list = cloudAccounts();
     return list.filter(function (a) { return a && a.apiKey; });
@@ -876,12 +894,12 @@
     const pool = cloudAccPool();
     if (!pool.length) throw new Error('没有可用账号：导入的账号里没有 API Key（在「H3账号 → 导入账号」重新导入带 Key 的）');
 
+    await semAcquire();
+    try {
     let lastErr = null;
     let start = Number(S.cloudAccIdx || 0) % pool.length;
-    let round = 0;
-    for (;;) {
+    for (let round = 1; round <= 6; round++) {
       if (STOP_ALL) throw new Error('已取消');
-      round++;
       for (let k = 0; k < pool.length; k++) {
         const acc = pool[(start + k) % pool.length];
         try {
@@ -896,11 +914,13 @@
           await new Promise(function (r) { setTimeout(r, 1200); });
         }
       }
-      const wait = Math.min(30000, 4000 * round);
-      status('run', '账号都忙（' + (lastErr && lastErr.message ? lastErr.message.slice(0, 40) : '并发已满') + '），' + Math.round(wait / 1000) + ' 秒后再试（第 ' + round + ' 轮，不会放弃）…');
+      const wait = Math.min(20000, 3000 * round);
+      status('run', '账号都忙，' + Math.round(wait / 1000) + ' 秒后再排一次（第 ' + round + '/6）…');
       await new Promise(function (r) { setTimeout(r, wait); });
       if (lastErr) start = (start + 1) % pool.length;
     }
+    throw new Error('账号试了 6 轮都忙：' + (lastErr && lastErr.message ? lastErr.message : '并发已满'));
+    } finally { semRelease(); }
   }
 
   async function cloudVideoOnce(acc, opts) {
@@ -1123,7 +1143,7 @@
               break;
             } catch (e) {
               const m = String(e && e.message || '');
-              if (/并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m) && !STOP_ALL) {
+              if (/并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m) && !STOP_ALL && tries < 12) {
                 tries = (tries || 0) + 1;
                 const wait = Math.min(30000, 4000 * tries);
                 status('run', '第 ' + (i + 1) + ' 条并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
@@ -2054,7 +2074,7 @@
         });
       } catch (e) {
         const msg = String(e && e.message || '');
-        if (/并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg) && !STOP_ALL) {
+        if (/并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg) && !STOP_ALL && tries < 12) {
           tries = (tries || 0) + 1;
           const wait = Math.min(30000, 3000 * tries);
           status('run', '场景「' + s.name + '」并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
