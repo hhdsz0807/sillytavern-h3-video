@@ -695,7 +695,7 @@
 8) 正文里的心理活动、内心独白（斜体、*…*、【心想】这类）要转成画外音旁白，写在 detailed_description 里：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；角色真正说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两种都要保留，不要丢。
 9) 六段每段只出现一次；不要在 detailed_description 里重新开始写 subject_definitions / summary / retention_analysis。
 10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。
-12) 在 [[H3]] 内**第一行**先输出一行机器标记（只这一行，不要解释）：<!--CAST: 角色名1, 角色名2 | SCENE: 场景名-->；角色名用正文原字。然后六段；六段里 <Subject 1..k> 与 <Picture 1..k> 的顺序必须与 CAST 里角色顺序一致，场景图永远排在最后一位。只使用 CAST 里出现的角色。\n13) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
+12) 在 [[H3]] 内**第一行**先输出一行机器标记（只这一行，不要解释）：<!--CAST: 角色名1, 角色名2 | SCENE: 场景名-->；角色名、场景名必须从用户给的【素材清单】里照抄（没有清单才用正文原字）。然后六段；六段里 <Subject 1..k> 与 <Picture 1..k> 的顺序必须与 CAST 里角色顺序一致，场景图永远排在最后一位。只使用 CAST 里出现的角色。\n13) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
@@ -1229,6 +1229,22 @@
   const SEGIMG = {};   // { blockIndex: [file, ...] }
   const SEGCAST = {};  // { blockIndex: {cast:[names], scene:'name'} }
 
+  function buildAssetList() {
+    const chars = [];
+    const names = Array.isArray(S.charNames) ? S.charNames : [];
+    for (let i = 0; i < 6; i++) {
+      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+      const nm = (names[i] || '').trim();
+      if (sel && sel.value && nm) chars.push(nm);
+    }
+    const scenes = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
+    let text = '';
+    if (chars.length) text += '可用角色（CAST 里只能照抄这些名字）：\n' + chars.map(function (c) { return '- ' + c; }).join('\n') + '\n';
+    if (scenes.length) text += '可用场景（SCENE 里只能照抄这些名字）：\n' + scenes.map(function (c) { return '- ' + c; }).join('\n') + '\n';
+    if (!text) text = '（素材清单为空：请先在视频弹窗里给角色槽填名字、并生成场景库）\n';
+    return { chars: chars, scenes: scenes, text: text };
+  }
+
   function resolveChar(name) {
     if (!name) return '';
     const want = String(name).replace(/\s+/g, '');
@@ -1274,7 +1290,8 @@
     const t0 = Date.now();
     try {
       status('run', '① 先估时长 / 排分镜…');
-      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""', 2000);
+      const assets = buildAssetList();
+      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""\n\n' + assets.text, 2000);
       const plan = parsePlan(planTxt);
       status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
       let castText = '';
@@ -1290,6 +1307,7 @@
         const prevTail = lastBlock ? blockTail(lastBlock) : '';
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
           + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
+          + '【素材清单】每段第一行的 CAST 标记只能用下面清单里的原字名字；本段出现谁就写谁，没出现的不写：\n' + assets.text + '\n'
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
