@@ -1070,6 +1070,8 @@
   }
 
   let ABORT = null;
+  let MAXTOK_OVERRIDE = 0;
+  let MAXTIMEOUT = 0;
 
   async function postJSON(urls, key, bodyObj, label) {
     const signal = ABORT ? ABORT.signal : undefined;
@@ -1080,7 +1082,7 @@
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
           body: JSON.stringify(bodyObj),
-        }), 60000, label + ' ');
+        }), (MAXTIMEOUT || 60000), label + ' ');
         const txt = await r.text();
         if (!r.ok) { lastErr = new Error(u + ' → HTTP ' + r.status + '：' + txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 140)); continue; }
         let j = null; try { j = JSON.parse(txt); } catch (_) { lastErr = new Error(u + ' → 不是 JSON：' + txt.slice(0, 120)); continue; }
@@ -1142,7 +1144,7 @@
       model: model, stream: false,
       messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
     }, params);
-    let maxTok = Number(S.maxTokens || 100000);
+    let maxTok = MAXTOK_OVERRIDE || Number(S.maxTokens || 100000);
     for (let attempt = 0; attempt < 2; attempt++) {
       jobLabel('调自定义 API · 第 ' + (attempt + 1) + '/2 次（max_tokens ' + maxTok + '）');
       const body = Object.assign({}, bodyObj, { max_tokens: maxTok });
@@ -1658,45 +1660,82 @@
     const btn = $('#h3v-qc');
     if (btn) btn.disabled = true;
     jobBegin(auto ? '自动修缮分段' : '检查并修缮');
-    pgSet(40);
-    try {
-      const assets = buildAssetList();
-      jobLabel('审校 ' + before.length + ' 段…');
-      const out = await callAI(CHECK_SYS, assets.text + '\n以下是待审校的分段：\n' + src, 8000);
-      let fixed = parseBlocks(out);
-      if (fixed.length !== before.length) {
-        status('err', '修缮结果段数不一致（' + fixed.length + ' ≠ ' + before.length + '），已保留原文');
-        return;
+    pgSet(5);
+    const assets = buildAssetList();
+    const wrap = function (b) { return '[[H3]]\n' + String(b).replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; };
+    const BATCH = 2;
+    const outBlocks = new Array(before.length);
+    let fixedCount = 0, keptCount = 0;
+
+    async function repairOne(text, budget) {
+      MAXTOK_OVERRIDE = budget;
+      MAXTIMEOUT = budget <= 4000 ? 90000 : 60000;
+      try {
+        const out = await callAI(CHECK_SYS, assets.text + '\n以下是待审校的分段（' + text.blocks + ' 段）：\n' + text.body, budget);
+        const got = parseBlocks(out);
+        if (got.length !== text.blocks) throw new Error('段数不一致 ' + got.length + '≠' + text.blocks);
+        return got;
+      } finally {
+        MAXTOK_OVERRIDE = 0;
+        MAXTIMEOUT = 0;
       }
-      // 重新解析 CAST 并重建每段素材
-      Object.keys(SEGIMG).forEach(function (k) { delete SEGIMG[k]; });
-      Object.keys(SEGCAST).forEach(function (k) { delete SEGCAST[k]; });
-      const clean = fixed.map(function (b, i) {
-        const cast = parseCastLine(b);
-        if (cast) b = b.replace(cast.raw, '').trim();
-        const nb = normalizeBlock(b);
-        if (cast) {
-          SEGCAST[i] = cast;
-          const files = [];
-          (cast.cast || []).forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
-          const sf = resolveScene(cast.scene);
-          if (sf) files.push(sf);
-          if (files.length) SEGIMG[i] = files;
-        }
-        return nb;
-      });
-      box.value = clean.map(function (b) { return '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; }).join('\n\n');
-      saveBlocks(CURMESID, box.value);
-      refreshBlockList();
-      renderSegTable();
-      pgSet(100);
-      status('ok', '已修缮 ' + clean.length + ' 段（段名/冒号、中英混排、时间戳、Subject 编号、CAST 行）');
-    } catch (e) {
-      status('err', '修缮失败：' + (e && e.message ? e.message : e));
-    } finally {
-      if (btn) btn.disabled = false;
-      jobEnd();
     }
+
+    for (let i = 0; i < before.length; i += BATCH) {
+      const slice = before.slice(i, i + BATCH);
+      const hi = Math.min(i + BATCH, before.length);
+      jobLabel('审校第 ' + (i + 1) + '–' + hi + ' 段（共 ' + before.length + ' 段）');
+      pgSet(5 + 90 * (i / before.length));
+      let got = null;
+      try {
+        got = await repairOne({ blocks: slice.length, body: slice.map(wrap).join('\n\n') }, 6000);
+        fixedCount += slice.length;
+      } catch (e) {
+        LOG('qc batch fail', i, e);
+        // 降级：逐段重试
+        got = [];
+        for (let k = 0; k < slice.length; k++) {
+          try {
+            const one = await repairOne({ blocks: 1, body: wrap(slice[k]) }, 4000);
+            got.push(one[0]);
+            fixedCount++;
+          } catch (e2) {
+            LOG('qc single fail', i + k, e2);
+            got.push(slice[k]);
+            keptCount++;
+          }
+        }
+      }
+      for (let k = 0; k < slice.length; k++) outBlocks[i + k] = got[k] || slice[k];
+    }
+
+    // 重新解析 CAST + 组装
+    Object.keys(SEGIMG).forEach(function (k) { delete SEGIMG[k]; });
+    Object.keys(SEGCAST).forEach(function (k) { delete SEGCAST[k]; });
+    const clean = outBlocks.map(function (b, i) {
+      let s = String(b || '');
+      const cast = parseCastLine(s);
+      if (cast) s = s.replace(cast.raw, '').trim();
+      const nb = normalizeBlock(s);
+      if (cast) {
+        SEGCAST[i] = cast;
+        const files = [];
+        (cast.cast || []).forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
+        const sf = resolveScene(cast.scene);
+        if (sf) files.push(sf);
+        if (files.length) SEGIMG[i] = files;
+      }
+      return nb;
+    });
+
+    box.value = clean.map(wrap).join('\n\n');
+    saveBlocks(CURMESID, box.value);
+    refreshBlockList();
+    renderSegTable();
+    pgSet(100);
+    if (btn) btn.disabled = false;
+    jobEnd();
+    status(keptCount ? 'err' : 'ok', '已修缮 ' + fixedCount + ' 段' + (keptCount ? '，' + keptCount + ' 段超时保留原文（可再点一次「检查并修缮」）' : ''));
   }
 
   async function genSix() {
