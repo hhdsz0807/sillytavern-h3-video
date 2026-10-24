@@ -226,6 +226,14 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    if ($('#h3v-videoStyle')) {
+      $('#h3v-videoStyle').value = S.videoStyle || 'anime';
+      $('#h3v-videoStyle').onchange = function () { S.videoStyle = $('#h3v-videoStyle').value; saveS(); };
+    }
+    if ($('#h3v-chain')) {
+      $('#h3v-chain').checked = S.chain !== false;
+      $('#h3v-chain').onchange = function () { S.chain = $('#h3v-chain').checked; saveS(); };
+    }
     if ($('#h3v-videoConc')) {
       $('#h3v-videoConc').value = String(S.videoConc || 2);
       $('#h3v-videoConc').onchange = function () { S.videoConc = Number($('#h3v-videoConc').value) || 2; saveS(); };
@@ -575,18 +583,38 @@
     return '';
   }
 
-  async function submitBlock(blockText, seconds, sceneOverride, filesOverride) {
-    const images = [];
-    for (let i = 0; i < 6; i++) {
-      const sel = document.querySelector(`#h3v-views select[data-v="${i}"]`);
-      if (sel && sel.value) images.push(sel.value);
+  async function submitBlock(blockText, seconds, sceneOverride, filesOverride, idx) {
+    let images = [];
+    if (Array.isArray(filesOverride) && filesOverride.length) {
+      images = filesOverride.slice();
+    } else {
+      CHARLIB.forEach(function (c) { if (images.length < 5) images.push(c.file); });
+      const scenePick = sceneOverride || ($('#h3v-scene') ? $('#h3v-scene').value : '');
+      if (scenePick) images.push(scenePick);
     }
-    const scenePick = sceneOverride || $('#h3v-scene').value;
-    if (scenePick) images.push(scenePick);
-    if (!images.length) throw new Error('至少放一张图（四视图或场景图）');
+
+    // 接上一段尾帧
+    let text = String(blockText || '');
+    const i2 = Number(idx);
+    if (S.chain !== false && i2 > 0 && SEGLAST[i2 - 1]) {
+      images.push(SEGLAST[i2 - 1]);
+      text = injectTailFrame(text, images.length);
+      LOG('chain: segment', i2 + 1, 'uses tail of', i2);
+    }
+
+    if (!images.length) throw new Error('至少放一张图（角色或场景）');
+
+    // 按角色顺序取音色（最多 3）
+    const audios = [];
+    images.forEach(function (f) {
+      const a = charAudioFor(f);
+      if (a && audios.length < 3 && audios.indexOf(a) < 0) audios.push(a);
+    });
+
     const j = await jpost('/api/mm/run', {
       images: images,
-      prompt: blockText,
+      audios: audios,
+      prompt: text,
       seconds: seconds,
       megapixels: Number($('#h3v-mp').value) || 0.98,
       aspect: S.aspect,
@@ -624,11 +652,13 @@
     $('#h3v-out').innerHTML = html + $('#h3v-out').innerHTML;
   }
 
-  async function runOne(blockText, seconds, label) {
+  async function runOne(blockText, seconds, label, sceneOverride, filesOverride, idx) {
     status('run', (label ? label + ' · ' : '') + '提交中…');
-    const id = await submitBlock(blockText, seconds);
+    const id = await submitBlock(blockText, seconds, sceneOverride, filesOverride, idx);
     status('run', (label ? label + ' · ' : '') + 'taskId=' + id + '，云端跑片约 4–7 分钟…');
-    return await waitTask(id, label);
+    const r = await waitTask(id, label);
+    try { await rememberTail(Number(idx), r.items.map(function (v) { return v.url; })); } catch (_) {}
+    return r;
   }
 
   async function runVideo() {
@@ -642,7 +672,7 @@
     btn.disabled = true;
     jobBegin('生成视频 · 第' + (idx + 1) + '条');
     try {
-      const r = await runOne(b, sec, '第' + (idx + 1) + '条', SEGCFG[idx], SEGIMG[idx]);
+      const r = await runOne(b, sec, '第' + (idx + 1) + '条', SEGCFG[idx], SEGIMG[idx], idx);
       showVideos(r, '第 ' + (idx + 1) + ' 条 · ' + sec + 's');
       status('ok', '第' + (idx + 1) + '条完成 · 用时 ' + Math.floor(r.secs / 60) + ' 分 ' + (r.secs % 60) + ' 秒'
         + (r.coins ? ' · ' + r.coins + ' 币' : ''));
@@ -658,7 +688,8 @@
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
     if (blocks.length === 1) return runVideo();
-    const conc = Math.max(1, Math.min(10, Number(S.videoConc || 2)));
+    let conc = Math.max(1, Math.min(10, Number(S.videoConc || 2)));
+    if (S.chain !== false) { conc = 1; status('run', '已开启「接上一段尾帧」→ 只能串行跑（否则后一段拿不到前一段的尾帧）'); }
     const btn = $('#h3v-runAll');
     btn.disabled = true;
     jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc);
@@ -684,6 +715,7 @@
             }
           }
           const r = await waitTask(id, '第 ' + (i + 1) + ' 条');
+          try { await rememberTail(i, r.items.map(function (v) { return v.url; })); } catch (_) {}
           okN++; coins += r.coins || 0;
           showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
         } catch (e) {
@@ -1186,6 +1218,42 @@
     return '';
   }
 
+  /* ---------- 视频画风强制 ---------- */
+  const VIDEO_STYLE_LINE = {
+    anime: 'Visual style: 2D anime, cel-shaded flat colors, clean lineart, painted 2D backgrounds, no photorealistic texture, no 3D render, no live-action footage.',
+    real: 'Visual style: photorealistic live-action footage, natural light, real materials, 35mm lens.',
+    cinematic: 'Visual style: cinematic live-action, photorealistic, moody color grading, shallow depth of field.',
+    watercolor: 'Visual style: watercolor illustration animation, soft washes, paper texture, hand-painted look, no photoreal detail.',
+  };
+  const LIVE_WORDS = [
+    [/\bLive-action\b/gi, 'Anime-style 2D'],
+    [/\blive-action\b/gi, '2D anime'],
+    [/\bphotorealistic\b/gi, '2D cel-shaded'],
+    [/\bphotograph(y|ic)\b/gi, 'anime illustration'],
+    [/\bfilm grain\b/gi, 'clean flat shading'],
+    [/\bhandheld(-| )?(style|adjacent)?\b/gi, 'steady 2D animation'],
+  ];
+
+  function applyVideoStyle(block) {
+    let s = String(block || '');
+    const key = S.videoStyle || 'anime';
+    const line = VIDEO_STYLE_LINE[key] || VIDEO_STYLE_LINE.anime;
+    // 去掉旧的风格首句（避免自相矛盾）
+    s = s.replace(/(detailed_description:\s*\n)(\s*)(Anime-style 2D|Live-action|Photorealistic|Cinematic|Watercolor)[^\n]*\n/gi, '$1$2');
+    if (key === 'anime' || key === 'watercolor') {
+      LIVE_WORDS.forEach(function (pair) { s = s.replace(pair[0], pair[1]); });
+    }
+    // 在 detailed_description 下插入风格行
+    const lines = s.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*detailed_description\s*:/i.test(lines[i])) {
+        if (!/Visual style:/i.test(lines[i + 1] || '')) lines.splice(i + 1, 0, line);
+        break;
+      }
+    }
+    return lines.join('\n');
+  }
+
   function blockTail(b) {
     const m = String(b || '').match(/detailed_description\s*:?\s*([\s\S]*?)(?:\n\s*overall_soundscape\s*:?|$)/i);
     const dd = (m ? m[1] : String(b || '')).trim();
@@ -1371,6 +1439,59 @@
   /* ---------- 按段解析 CAST → 取对应素材 ---------- */
   const SEGIMG = {};   // { blockIndex: [file, ...] }
   const SEGCAST = {};  // { blockIndex: {cast:[names], scene:'name'} }
+
+  /* ---------- 分段接续：抓上一段尾帧，当下一段首帧参考 ---------- */
+  const SEGLAST = {};
+
+  function grabLastFrame(videoUrl) {
+    return new Promise(function (resolve, reject) {
+      const v = document.createElement("video");
+      v.src = videoUrl;
+      v.muted = true;
+      v.preload = "auto";
+      v.playsInline = true;
+      const to = setTimeout(function () { reject(new Error("取帧超时")); }, 20000);
+      v.onloadeddata = function () {
+        try { v.currentTime = Math.max(0, (v.duration || 1) - 0.08); } catch (_) { try { v.currentTime = 0; } catch (_) {} }
+      };
+      v.onseeked = function () {
+        try {
+          const c = document.createElement("canvas");
+          c.width = v.videoWidth || 768;
+          c.height = v.videoHeight || 1344;
+          c.getContext("2d").drawImage(v, 0, 0);
+          c.toBlob(function (b) { clearTimeout(to); b ? resolve(b) : reject(new Error("canvas 导出失败")); }, "image/jpeg", 0.92);
+        } catch (e) { clearTimeout(to); reject(e); }
+      };
+      v.onerror = function () { clearTimeout(to); reject(new Error("视频加载失败")); };
+    });
+  }
+
+  async function rememberTail(idx, files) {
+    try {
+      if (S.chain === false || !files || !files.length) return;
+      const first = files[0];
+      const url = api(typeof first === "string" ? first : (first.url || first.viewUrl || ""));
+      const blob = await grabLastFrame(url);
+      const fname = "tail_" + Date.now() + "_" + idx + ".jpg";
+      const up = await fetch(api("/api/upload?name=" + encodeURIComponent(fname) + "&kind=image"), {
+        method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: blob,
+      }).then(function (r) { return r.json(); });
+      if (up && up.name) { SEGLAST[idx] = up.name; LOG("tail saved", idx, up.name); }
+    } catch (e) { LOG("tail fail", idx, e); }
+  }
+
+  function injectTailFrame(blockText, picNo) {
+    let s = String(blockText || "");
+    const line = "<Picture " + picNo + "> is the exact last frame of the previous segment and the required first frame of [Shot 1].";
+    const arr = s.split("\n");
+    let at = -1;
+    for (let i = 0; i < arr.length; i++) { if (/^\s*summary\s*:/i.test(arr[i])) { at = i; break; } }
+    if (at >= 0) arr.splice(at, 0, line);
+    s = arr.join("\n");
+    s = s.replace(/\[Shot 1\]\s*/, "[Shot 1] The frame opens exactly on <Picture " + picNo + ">, the last frame of the previous segment, with no cut and no camera reset. ");
+    return s;
+  }
 
   function charAudioByName(name) {
     if (!name) return '';
@@ -1760,6 +1881,7 @@
       if (cast) s = s.replace(cast.raw, '').trim();
       let nb = normalizeBlock(s);
       nb = ensureAudioTags(nb, cast);
+          nb = applyVideoStyle(nb);
       if (cast) {
         SEGCAST[i] = cast;
         const files = [];
@@ -1811,6 +1933,7 @@
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
           + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
           + '【素材清单】每段第一行的 CAST 标记只能用下面清单里的原字名字；本段出现谁就写谁，没出现的不写：\n' + assets.text + '\n'
+          + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld footage 等实拍词，改成 2D anime、cel-shaded、flat color、clean lineart。\n'
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
           + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
@@ -1836,6 +1959,7 @@
           if (cast) { b = b.replace(cast.raw, '').trim(); }
           let nb = normalizeBlock(b);
           nb = ensureAudioTags(nb, cast);
+          nb = applyVideoStyle(nb);
           blocks.push(nb); lastBlock = nb;
           if (cast) {
             const idx2 = blocks.length - 1;
