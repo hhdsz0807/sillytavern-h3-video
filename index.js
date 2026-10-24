@@ -751,7 +751,9 @@
     if (local) return local;
     const r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(file)));
     if (!r.ok) throw new Error('从手机取文件失败：' + file);
-    return await r.blob();
+    const blob = await r.blob();
+    try { await IDB.put(file, blob, 'cache'); } catch (_) {}
+    return blob;
   }
 
   async function captureTailFromUrl(url) {
