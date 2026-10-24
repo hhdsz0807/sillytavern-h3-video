@@ -150,6 +150,7 @@
           <input type="number" id="h3v-genConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none">
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
+          <button id="h3v-trans" style="flex:none">看中文翻译</button>
           <button id="h3v-cancelAI" style="flex:none">取消</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
@@ -351,6 +352,8 @@
     };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-qc')) $('#h3v-qc').onclick = function () { qcFix(false); };
+    if ($('#h3v-trans')) $('#h3v-trans').onclick = translateAll;
+    if ($('#h3v-transHide')) $('#h3v-transHide').onclick = function () { var b = $('#h3v-transBox'); if (b) b.style.display = 'none'; };
     if ($('#h3v-genConc')) {
       $('#h3v-genConc').value = String(S.genConc || 3);
       $('#h3v-genConc').onchange = function () { S.genConc = Number($('#h3v-genConc').value) || 3; saveS(); };
@@ -2395,6 +2398,49 @@
     '',
     '只输出修缮后的全部 [[H3]]…[[/H3]] 段，段数与输入完全一致，不要解释、不要前缀后缀、不要代码块。',
   ].join('\n');
+
+  const TRANS_SYS = [
+    '你是影视分镜字幕翻译。用户给你若干 [[H3]]…[[/H3]] 段（每段六小节英文提示词）。',
+    '请逐段翻译成简体中文，要求：',
+    '1) 保留 [[H3]] 与 [[/H3]] 标记、保留六小节英文标题（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）不动，只翻译标题后面的内容；',
+    '2) 保留 <Subject N>、<Picture N>、<Audio N>、(S1)=等标签原样，不翻译标签本身；',
+    '3) <d>[Chinese] …</d> 里的台词保持原文不动；',
+    '4) 时间戳 At MM:SS.mmm 保持原样；',
+    '5) 不增删内容、不写解释、不加评论。',
+    '只输出翻译后的完整内容。',
+  ].join('\n');
+
+  async function translateAll() {
+    const src = ($('#h3v-prompt') || {}).value || '';
+    if (!src.trim()) { status('err', '没有提示词可翻译'); return; }
+    const box = $('#h3v-transBox'), out = $('#h3v-transText');
+    const btn = $('#h3v-trans');
+    if (btn) btn.disabled = true;
+    if (box) box.style.display = 'block';
+    if (out) out.textContent = '翻译中…';
+    jobBegin('翻译提示词');
+    pgSet(20);
+    try {
+      const blocks = parseBlocks(src);
+      const outLines = [];
+      for (let i = 0; i < blocks.length; i++) {
+        jobLabel('翻译 第 ' + (i + 1) + '/' + blocks.length + ' 段');
+        pgSet(20 + 70 * (i / Math.max(1, blocks.length)));
+        const one = '[[H3]]\n' + blocks[i] + '\n[[/H3]]';
+        let zh = '';
+        try { zh = await callAI(TRANS_SYS, one, 3000); } catch (e) { zh = '（这段翻译失败：' + e.message + '）'; }
+        outLines.push(String(zh || '').trim());
+      }
+      if (out) out.textContent = outLines.join('\n\n');
+      pgSet(100);
+      status('ok', '翻译完成（' + blocks.length + ' 段），左边英文原文没动');
+    } catch (e) {
+      status('err', '翻译失败：' + e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+      jobEnd();
+    }
+  }
 
   async function qcFix(auto) {
     const box = $('#h3v-prompt');
