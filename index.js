@@ -151,6 +151,7 @@
           <input type="number" id="h3v-genConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none">
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
+          <input type="number" id="h3v-qcConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none" title="修缮并发">
           <button id="h3v-trans" style="flex:none">看中文翻译</button>
           <input type="number" id="h3v-transConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none" title="翻译并发">
           <button id="h3v-cancelAI" style="flex:none">取消</button>
@@ -357,6 +358,10 @@
     };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-qc')) $('#h3v-qc').onclick = function () { qcFix(false); };
+    if ($('#h3v-qcConc')) {
+      $('#h3v-qcConc').value = String(S.qcConc || 3);
+      $('#h3v-qcConc').onchange = function () { S.qcConc = Number($('#h3v-qcConc').value) || 3; saveS(); };
+    }
     if ($('#h3v-trans')) $('#h3v-trans').onclick = translateAll;
     if ($('#h3v-transConc')) {
       $('#h3v-transConc').value = String(S.transConc || 3);
@@ -2504,68 +2509,64 @@
     if (!src) { status('err', '没有提示词可检查'); return; }
     const before = parseBlocks(src);
     if (!before.length) { status('err', '没解析到 [[H3]] 块'); return; }
+
     const btn = $('#h3v-qc');
     if (btn) btn.disabled = true;
-    jobBegin(auto ? '自动修缮分段' : '检查并修缮');
+    const conc = Math.max(1, Number(S.qcConc || S.genConc || 3));
+    jobBegin((auto ? '自动修缮 ' : '检查并修缮 ') + before.length + ' 段 · 并发 ' + conc);
     pgSet(5);
+
     const assets = buildAssetList();
     const wrap = function (b) { return '[[H3]]\n' + String(b).replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; };
-    const BATCH = 2;
-    const outBlocks = new Array(before.length);
-    let fixedCount = 0, keptCount = 0;
+    const outBlocks = new Array(before.length).fill(null);
+    let next = 0, done = 0, fixedN = 0, keptN = 0;
 
-    async function repairOne(text, budget) {
-      MAXTOK_OVERRIDE = budget;
-      MAXTIMEOUT = budget <= 4000 ? 90000 : 60000;
+    async function repairOne(blockText) {
+      MAXTOK_OVERRIDE = 3000;
+      MAXTIMEOUT = 60000;
       try {
-        const out = await callAI(CHECK_SYS, assets.text + '\n以下是待审校的分段（' + text.blocks + ' 段）：\n' + text.body, budget);
+        const out = await callAI(CHECK_SYS, assets.text + '\n以下是待审校的分段（1 段）：\n' + wrap(blockText), 3000);
         const got = parseBlocks(out);
-        if (got.length !== text.blocks) throw new Error('段数不一致 ' + got.length + '≠' + text.blocks);
-        return got;
+        if (!got.length) throw new Error('没返回分段');
+        return got[0];
       } finally {
         MAXTOK_OVERRIDE = 0;
         MAXTIMEOUT = 0;
       }
     }
 
-    for (let i = 0; i < before.length; i += BATCH) {
-      const slice = before.slice(i, i + BATCH);
-      const hi = Math.min(i + BATCH, before.length);
-      jobLabel('审校第 ' + (i + 1) + '–' + hi + ' 段（共 ' + before.length + ' 段）');
-      pgSet(5 + 90 * (i / before.length));
-      let got = null;
-      try {
-        got = await repairOne({ blocks: slice.length, body: slice.map(wrap).join('\n\n') }, 6000);
-        fixedCount += slice.length;
-      } catch (e) {
-        LOG('qc batch fail', i, e);
-        // 降级：逐段重试
-        got = [];
-        for (let k = 0; k < slice.length; k++) {
-          try {
-            const one = await repairOne({ blocks: 1, body: wrap(slice[k]) }, 4000);
-            got.push(one[0]);
-            fixedCount++;
-          } catch (e2) {
-            LOG('qc single fail', i + k, e2);
-            got.push(slice[k]);
-            keptCount++;
-          }
+    async function worker() {
+      while (true) {
+        const i = next++;
+        if (i >= before.length) return;
+        try {
+          outBlocks[i] = await repairOne(before[i]);
+          fixedN++;
+        } catch (err) {
+          LOG('qc fail', i, err);
+          outBlocks[i] = before[i];
+          keptN++;
         }
+        done++;
+        pgSet(5 + 90 * (done / before.length));
+        status('run', '修缮进度 ' + done + '/' + before.length + '（并发 ' + conc + '）…');
       }
-      for (let k = 0; k < slice.length; k++) outBlocks[i + k] = got[k] || slice[k];
     }
 
-    // 重新解析 CAST + 组装
+    const ws = [];
+    for (let k = 0; k < Math.min(conc, before.length); k++) ws.push(worker());
+    await Promise.all(ws);
+
+    // 重建 CAST / 每段素材 / 画风 / 音色标签
     Object.keys(SEGIMG).forEach(function (k) { delete SEGIMG[k]; });
     Object.keys(SEGCAST).forEach(function (k) { delete SEGCAST[k]; });
     const clean = outBlocks.map(function (b, i) {
-      let s = String(b || '');
-      const cast = parseCastLine(s);
-      if (cast) s = s.replace(cast.raw, '').trim();
-      let nb = normalizeBlock(s);
+      let s2 = String(b || '');
+      const cast = parseCastLine(s2);
+      if (cast) s2 = s2.replace(cast.raw, '').trim();
+      let nb = normalizeBlock(s2);
       nb = ensureAudioTags(nb, cast);
-          nb = applyVideoStyle(nb);
+      nb = applyVideoStyle(nb);
       if (cast) {
         SEGCAST[i] = cast;
         const files = [];
@@ -2584,8 +2585,9 @@
     pgSet(100);
     if (btn) btn.disabled = false;
     jobEnd();
-    status(keptCount ? 'err' : 'ok', '已修缮 ' + fixedCount + ' 段' + (keptCount ? '，' + keptCount + ' 段超时保留原文（可再点一次「检查并修缮」）' : ''));
+    status(keptN ? 'err' : 'ok', '修缮完成 ' + fixedN + ' 段' + (keptN ? '，' + keptN + ' 段失败保留原文' : ''));
   }
+
 
   async function genSix() {
     jobBegin('生成六段');
