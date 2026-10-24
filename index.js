@@ -146,6 +146,7 @@
             <option value="api">自定义 API</option>
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
+          <button id="h3v-qc" style="flex:none">检查并修缮</button>
           <button id="h3v-cancelAI" style="flex:none">取消</button>
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
@@ -286,6 +287,7 @@
       status('err', '已取消本次 AI 请求');
     };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
+    if ($('#h3v-qc')) $('#h3v-qc').onclick = function () { qcFix(false); };
     if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
     if ($('#h3v-sceneStyle')) {
       $('#h3v-sceneStyle').value = S.sceneStyle || 'anime';
@@ -1630,6 +1632,73 @@
     inp.click();
   }
 
+  const CHECK_SYS = [
+    '你是 MiniMax H3 全参考模式（Ref2VA）提示词审校员。用户给你若干 [[H3]]…[[/H3]] 段，每段六小节。逐段检查并直接给出修缮后的完整版本。',
+    '',
+    '必须修的问题：',
+    '1) 六段名必须齐全且带冒号：subject_definitions: / summary: / retention_analysis: / detailed_description: / overall_soundscape: / non_diegetic_music:',
+    '2) 六段必须全英文；中文只允许出现在 <d>[Chinese] …</d> 台词里。混进英文描述的中文要译成英文（人名地名可保留原字或拼音，但全片必须统一）。',
+    '3) [Shot 1] 不允许出现任何时间戳；从第 2 镜起才写 [Shot N] At MM:SS.mmm, …',
+    '4) <Subject N> 从 1 开始连续编号，不许跳号；<Picture N> 的编号与 subject_definitions 里的引用一致，且顺序＝本段角色顺序、场景永远最后。',
+    '5) 若本段用到音色参考，写成 <Audio N> is the voice-timbre reference for <Subject N>.（最多 3 条）；没有音色就不要编造。',
+    '6) 删掉任何界面/选项/字幕/光标/UI 描述；删掉 keep consistent with reference 这类不带编号的空话。',
+    '7) 末镜时间不超过 00:14.500，整段不超过 15 秒；除非明显违规，不要随意增删镜头。',
+    '8) 每段第一行必须有 <!--CAST: 角色名 | SCENE: 场景名-->，名字只能用用户给的素材清单里的；本段没出现的角色不要写。',
+    '',
+    '只输出修缮后的全部 [[H3]]…[[/H3]] 段，段数与输入完全一致，不要解释、不要前缀后缀、不要代码块。',
+  ].join('\n');
+
+  async function qcFix(auto) {
+    const box = $('#h3v-prompt');
+    if (!box) return;
+    const src = box.value.trim();
+    if (!src) { status('err', '没有提示词可检查'); return; }
+    const before = parseBlocks(src);
+    if (!before.length) { status('err', '没解析到 [[H3]] 块'); return; }
+    const btn = $('#h3v-qc');
+    if (btn) btn.disabled = true;
+    jobBegin(auto ? '自动修缮分段' : '检查并修缮');
+    pgSet(40);
+    try {
+      const assets = buildAssetList();
+      jobLabel('审校 ' + before.length + ' 段…');
+      const out = await callAI(CHECK_SYS, assets.text + '\n以下是待审校的分段：\n' + src, 8000);
+      let fixed = parseBlocks(out);
+      if (fixed.length !== before.length) {
+        status('err', '修缮结果段数不一致（' + fixed.length + ' ≠ ' + before.length + '），已保留原文');
+        return;
+      }
+      // 重新解析 CAST 并重建每段素材
+      Object.keys(SEGIMG).forEach(function (k) { delete SEGIMG[k]; });
+      Object.keys(SEGCAST).forEach(function (k) { delete SEGCAST[k]; });
+      const clean = fixed.map(function (b, i) {
+        const cast = parseCastLine(b);
+        if (cast) b = b.replace(cast.raw, '').trim();
+        const nb = normalizeBlock(b);
+        if (cast) {
+          SEGCAST[i] = cast;
+          const files = [];
+          (cast.cast || []).forEach(function (nm) { const f = resolveChar(nm); if (f) files.push(f); });
+          const sf = resolveScene(cast.scene);
+          if (sf) files.push(sf);
+          if (files.length) SEGIMG[i] = files;
+        }
+        return nb;
+      });
+      box.value = clean.map(function (b) { return '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; }).join('\n\n');
+      saveBlocks(CURMESID, box.value);
+      refreshBlockList();
+      renderSegTable();
+      pgSet(100);
+      status('ok', '已修缮 ' + clean.length + ' 段（段名/冒号、中英混排、时间戳、Subject 编号、CAST 行）');
+    } catch (e) {
+      status('err', '修缮失败：' + (e && e.message ? e.message : e));
+    } finally {
+      if (btn) btn.disabled = false;
+      jobEnd();
+    }
+  }
+
   async function genSix() {
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
@@ -1700,6 +1769,7 @@
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\[\/H3\]\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
             saveBlocks(CURMESID, $('#h3v-prompt').value);
+      try { await qcFix(true); } catch (_) {}
       refreshBlockList();
       pgSet(100);
       status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
