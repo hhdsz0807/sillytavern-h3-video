@@ -151,6 +151,11 @@
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
+        <div class="row"><label>配置</label>
+          <select id="h3v-apiProf" style="flex:1;max-width:280px"></select>
+          <button id="h3v-apiSave" style="flex:none">存为新配置</button>
+          <button id="h3v-apiDel" style="flex:none">删</button>
+        </div>
           <div class="row"><label>API 地址</label><input type="text" id="h3v-aiBase" placeholder="https://api.deepseek.com/v1"></div>
           <div class="row"><label>API Key</label><input type="password" id="h3v-aiKey" placeholder="sk-…（只存本机）"></div>
           <div class="row"><label>模型</label>
@@ -234,6 +239,12 @@
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
     $('#h3v-run').onclick = runVideo;
+    if ($('#h3v-apiProf')) {
+      renderApiProfiles();
+      $('#h3v-apiProf').onchange = function () { if ($('#h3v-apiProf').value !== '') applyProfile($('#h3v-apiProf').value); };
+    }
+    if ($('#h3v-apiSave')) $('#h3v-apiSave').onclick = saveProfile;
+    if ($('#h3v-apiDel')) $('#h3v-apiDel').onclick = delProfile;
     if ($('#h3v-videoStyle')) {
       $('#h3v-videoStyle').value = S.videoStyle || 'anime';
       $('#h3v-videoStyle').onchange = function () { S.videoStyle = $('#h3v-videoStyle').value; saveS(); };
@@ -1540,6 +1551,63 @@
     if (idx < 0) return s;
     lines.splice(idx, 0, tags.join('\n'));
     return lines.join('\n');
+  }
+
+  /* ---------- 自定义 API 多配置 ---------- */
+  function apiProfiles() {
+    if (!Array.isArray(S.apiProfiles)) S.apiProfiles = [];
+    return S.apiProfiles;
+  }
+  function renderApiProfiles() {
+    const sel = $('#h3v-apiProf');
+    if (!sel) return;
+    const list = apiProfiles();
+    sel.innerHTML = '<option value="">（当前手动填写）</option>' +
+      list.map(function (p, i) { return '<option value="' + i + '">' + esc(p.name || p.model || ('配置' + (i + 1))) + '</option>'; }).join('');
+    sel.value = '';
+  }
+  function applyProfile(i) {
+    const list = apiProfiles();
+    const p = list[Number(i)];
+    if (!p) return;
+    S.aiBase = p.base || '';
+    S.aiKey = p.key || '';
+    S.aiModel = p.model || '';
+    if ($('#h3v-aiBase')) $('#h3v-aiBase').value = S.aiBase;
+    if ($('#h3v-aiKey')) $('#h3v-aiKey').value = S.aiKey;
+    if ($('#h3v-aiModel')) {
+      const sel = $('#h3v-aiModel');
+      if (!Array.from(sel.options).some(function (o) { return o.value === S.aiModel; })) {
+        const o = document.createElement('option'); o.value = S.aiModel; o.textContent = S.aiModel; sel.appendChild(o);
+      }
+      sel.value = S.aiModel;
+    }
+    saveS();
+    status('ok', '已切到配置「' + (p.name || p.model) + '」');
+  }
+  function saveProfile() {
+    const name = (prompt('配置名字（比如 commandcode / deepseek 官方）', (S.aiModel || 'config')) || '').trim();
+    if (!name) return;
+    const list = apiProfiles();
+    const item = { name: name, base: ($('#h3v-aiBase') || {}).value || S.aiBase || '', key: ($('#h3v-aiKey') || {}).value || S.aiKey || '', model: S.aiModel || '' };
+    const idx = list.findIndex(function (p) { return p.name === name; });
+    if (idx >= 0) list[idx] = item; else list.push(item);
+    S.aiBase = item.base; S.aiKey = item.key;
+    saveS();
+    renderApiProfiles();
+    status('ok', '已保存配置「' + name + '」（共 ' + list.length + ' 个）');
+  }
+  function delProfile() {
+    const sel = $('#h3v-apiProf');
+    const i = sel ? sel.value : '';
+    if (i === '') { status('err', '先在下拉里选一个配置'); return; }
+    const list = apiProfiles();
+    if (!list[Number(i)]) return;
+    if (!confirm('删掉配置「' + (list[Number(i)].name || '') + '」？')) return;
+    list.splice(Number(i), 1);
+    saveS();
+    renderApiProfiles();
+    status('ok', '已删除，剩 ' + list.length + ' 个配置');
   }
 
   function buildAssetList() {
