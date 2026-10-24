@@ -381,6 +381,7 @@
             const t = text || lastMessageText();
       CURTEXT = t || '';
       CURMESID = (mesid === undefined || mesid === null) ? null : String(mesid);
+      reloadLibsIfCardChanged();
       const savedB = CURMESID ? loadBlocks(CURMESID) : '';
       const ex = extractPrompt(t);
       if (savedB) { $('#h3v-prompt').value = savedB; status('ok', '已载入这条之前保存的六段提示词'); }
@@ -1332,10 +1333,49 @@
   }
 
   /* ---------- 场景库（Krea2 出图 → 存库 → 视频用） ---------- */
-  const SCENES = (function () {
+  /* ---------- 按角色卡隔离的三个库 ---------- */
+  function cardTag() {
+    try {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
+      const ch = ctx && ctx.characters && ctx.characters[ctx.characterId];
+      const id = ch && (ch.avatar || ch.name);
+      return String(id || 'default').replace(/[^\w\-.\u4e00-\u9fa5]/g, '_');
+    } catch (_) { return 'default'; }
+  }
+
+  function loadLib(base) {
+    try {
+      const cur = localStorage.getItem(base + '.' + cardTag());
+      if (cur) { const a = JSON.parse(cur); return Array.isArray(a) ? a : []; }
+      // 首次使用：把旧的全局数据迁到当前角色卡下
+      const old = JSON.parse(localStorage.getItem(base) || '[]');
+      const arr = Array.isArray(old) ? old : [];
+      if (arr.length) localStorage.setItem(base + '.' + cardTag(), JSON.stringify(arr));
+      return arr;
+    } catch (_) { return []; }
+  }
+
+  function saveLib(base, arr) {
+    try { localStorage.setItem(base + '.' + cardTag(), JSON.stringify(arr)); } catch (_) {}
+  }
+
+  let CURCARD_TAG = null;
+  function reloadLibsIfCardChanged(force) {
+    const tag = cardTag();
+    if (!force && tag === CURCARD_TAG) return;
+    CURCARD_TAG = tag;
+    SCENES = loadLib('h3v.scenes');
+    CHARLIB = loadLib('h3v.chars');
+    AUDIOLIB = loadLib('h3v.audios');
+    try { renderCharList(); renderSceneListBox(); renderAudioLib(); } catch (_) {}
+  }
+
+  let SCENES = loadLib('h3v.scenes');
+
+  const _OLDSCENES = (function () {
     try { const a = JSON.parse(localStorage.getItem('h3v.scenes') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
   })();
-  const saveScenes = function () { try { localStorage.setItem('h3v.scenes', JSON.stringify(SCENES)); } catch (_) {} };
+  const saveScenes = function () { saveLib('h3v.scenes', SCENES); };
 
   const SCENE_STYLE = {
     anime: '2D anime background art, cel-shaded, clean lineart, flat color fills, two-tone shading, no photorealistic texture, no 3D render',
@@ -1704,10 +1744,8 @@
 
   /* ---------- 角色库 / 场景库界面 ---------- */
   /* ---------- 角色库（独立持久化，不依赖下拉框） ---------- */
-  const CHARLIB = (function () {
-    try { const a = JSON.parse(localStorage.getItem('h3v.chars') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
-  })();
-  const saveChars = function () { try { localStorage.setItem('h3v.chars', JSON.stringify(CHARLIB)); } catch (_) {} };
+  let CHARLIB = loadLib('h3v.chars');
+  const saveChars = function () { saveLib('h3v.chars', CHARLIB); };
   // 旧数据迁移：早期角色存在 S.views 里
   (function () {
     try {
@@ -1843,10 +1881,8 @@
   }
 
   /* ---------- 音频库（角色音色参考） ---------- */
-  const AUDIOLIB = (function () {
-    try { const a = JSON.parse(localStorage.getItem('h3v.audios') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
-  })();
-  const saveAudios = function () { try { localStorage.setItem('h3v.audios', JSON.stringify(AUDIOLIB)); } catch (_) {} };
+  let AUDIOLIB = loadLib('h3v.audios');
+  const saveAudios = function () { saveLib('h3v.audios', AUDIOLIB); };
 
   function renderAudioLib() {
     const box = $('#h3v-audList');
