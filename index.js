@@ -994,6 +994,8 @@
     };
   }
   const VIDEOS = []; 
+  let RUN_TAG = '';
+  function newRunTag() { RUN_TAG = 'R' + new Date().toTimeString().slice(0,5).replace(':','') + Math.floor(Math.random()*9); return RUN_TAG; }
   function showVideos(r, label) {
     const list = (r.items && r.items.length) ? r.items : (r.all || []);
     if (!list.length) status('err', '拿到结果但没有视频条目：' + JSON.stringify(r).slice(0, 160));
