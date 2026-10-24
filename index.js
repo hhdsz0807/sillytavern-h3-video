@@ -1077,14 +1077,51 @@
   }
 
   async function runOne(blockText, seconds, label, sceneOverride, filesOverride, idx) {
+    const i2 = Number(idx);
+    const mp = Number($('#h3v-mp').value) || 0.98;
+    const steps = Number($('#h3v-steps').value) || 12;
+
+    if (S.videoCloud) {
+      status('run', (label ? label + ' · ' : '') + '云端直连提交中…');
+      const images = buildImagesFor(i2, sceneOverride, filesOverride);
+      const audios = [];
+      images.forEach(function (f) { const a = charAudioFor(f); if (a && audios.length < 3 && audios.indexOf(a) < 0) audios.push(a); });
+      const r = await cloudVideo({ images: images, audios: audios, prompt: blockText, seconds: seconds, mp: mp, aspect: S.aspect, steps: steps });
+      if (S.chain !== false && r.items && r.items[0]) {
+        try {
+          const blob = await captureTailFromUrl(r.items[0].url);
+          if (blob) {
+            const nm = 'tail_' + Date.now() + '.jpg';
+            await IDB.put(nm, blob, 'image');
+            SEGLAST[i2] = nm;
+          }
+        } catch (e) { LOG('cloud tail fail', e); }
+      }
+      return r;
+    }
+
     status('run', (label ? label + ' · ' : '') + '提交中…');
-    const id = await submitBlock(blockText, seconds, sceneOverride, filesOverride, idx);
+    const id = await submitBlock(blockText, seconds, sceneOverride, filesOverride, i2);
     status('run', (label ? label + ' · ' : '') + 'taskId=' + id + '，云端跑片约 4–7 分钟…');
     const r = await waitTask(id, label);
-    try { await rememberTail(Number(idx), r.items.map(function (v) { return v.url; })); } catch (_) {}
+    try { await rememberTail(i2, r.items.map(function (v) { return v.url; })); } catch (_) {}
+
+    // 改成「运行标记_第几条」便于辨认
+    try {
+      const tag = RUN_TAG || 'R';
+      const segNo = 's' + String(i2 + 1).padStart(2, '0');
+      for (let k = 0; k < (r.items || []).length; k++) {
+        const v = r.items[k];
+        if (!v.filename) continue;
+        const j = await jpost('/api/rename', { type: 'output', old: v.filename, new: tag + '_' + segNo + (k ? '_' + (k + 1) : '') });
+        if (j && j.ok && j.new) {
+          v.filename = j.new;
+          v.url = '/api/view?type=output&filename=' + encodeURIComponent(j.new);
+        }
+      }
+    } catch (e) { LOG('rename fail', e); }
     return r;
   }
-
   async function runRange() {
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
