@@ -678,12 +678,76 @@
     });
   }
 
+  const VIDEOS = [];
+
   function showVideos(r, label) {
-    const html = r.items.map(v =>
-      `<div style="margin-top:10px"><div class="hint">${esc(label || '')}</div>
-       <video src="${api(v.url)}" controls playsinline></video>
-       <div><a href="${api(v.url)}" download="${esc(v.filename || 'h3.mp4')}">下载</a></div></div>`).join('');
-    $('#h3v-out').innerHTML = html + $('#h3v-out').innerHTML;
+    (r.items || []).forEach(function (v) {
+      VIDEOS.push({ name: v.filename || '', url: v.url, label: label || '' });
+    });
+    renderOut();
+  }
+
+  function renderOut() {
+    const box = $('#h3v-out');
+    if (!box) return;
+    let head = '';
+    if (VIDEOS.length) {
+      head = '<div class="row" style="margin:8px 0">'
+        + '<button id="h3v-merge" style="flex:none">合并成一条（' + VIDEOS.length + '）</button>'
+        + '<button id="h3v-clear" style="flex:none">清空列表</button>'
+        + '<span class="hint">合并按列表顺序；删除只删手机里的文件</span></div>';
+    }
+    const body = VIDEOS.map(function (v, i) {
+      return '<div style="margin-top:10px"><div class="hint">' + esc(v.label || '') + ' · ' + esc(v.name || '') + '</div>'
+        + '<video src="' + api(v.url) + '" controls playsinline></video>'
+        + '<div><a href="' + api(v.url) + '" download="' + esc(v.name || 'h3.mp4') + '">下载</a>'
+        + ' <button data-vdel="' + i + '" style="margin-left:8px">删</button></div></div>';
+    }).join('');
+    box.innerHTML = head + body;
+
+    box.querySelectorAll('button[data-vdel]').forEach(function (el) {
+      const i = Number(el.dataset.vdel);
+      el.onclick = async function () {
+        const v = VIDEOS[i];
+        if (!v) return;
+        if (!confirm('删掉「' + (v.name || '') + '」？手机上会直接删除')) return;
+        try {
+          const j = await jpost('/api/del-output', { name: v.name });
+          if (!j.ok) throw new Error(j.error || '删除失败');
+          VIDEOS.splice(i, 1);
+          renderOut();
+          status('ok', '已删除 ' + v.name);
+        } catch (e) { status('err', '删除失败：' + e.message); }
+      };
+    });
+    const m = $('#h3v-merge');
+    if (m) m.onclick = mergeAll;
+    const c = $('#h3v-clear');
+    if (c) c.onclick = function () { VIDEOS.length = 0; renderOut(); };
+  }
+
+  async function mergeAll() {
+    if (VIDEOS.length < 2) { status('err', '至少两条才能合并'); return; }
+    const files = VIDEOS.map(function (v) { return v.name; }).filter(Boolean);
+    if (files.length < 2) { status('err', '文件名缺失，先在下面重新生成一次'); return; }
+    const btn = $('#h3v-merge');
+    if (btn) btn.disabled = true;
+    jobBegin('合并 ' + files.length + ' 条成片');
+    pgSet(30);
+    try {
+      const out = 'merged_' + Date.now() + '.mp4';
+      const j = await jpost('/api/merge', { files: files, out: out });
+      if (!j.ok) throw new Error(j.error || '合并失败');
+      pgSet(100);
+      VIDEOS.push({ name: j.name, url: j.url, label: '合并结果（' + files.length + ' 段）' });
+      renderOut();
+      status('ok', '已合并 ' + files.length + ' 条 → ' + j.name + '（' + Math.round((j.size || 0) / 1024) + ' KB，' + Math.round((j.ms || 0) / 1000) + ' 秒）');
+    } catch (e) {
+      status('err', '合并失败：' + e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+      jobEnd();
+    }
   }
 
   async function runOne(blockText, seconds, label, sceneOverride, filesOverride, idx) {
