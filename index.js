@@ -80,6 +80,13 @@
         </div>
         <details id="h3v-charDetails" style="margin:2px 0 10px"><summary id="h3v-charSum" style="cursor:pointer;color:#8b98ab;font-size:13px">角色库（点开）</summary><div id="h3v-charList"></div></details>
 
+        <details id="h3v-audDetails" style="margin:2px 0 10px">
+          <summary id="h3v-audSum" style="cursor:pointer;color:#8b98ab;font-size:13px">音频库（点开）</summary>
+          <div class="row"><label></label><button id="h3v-audUp" style="flex:none">+ 上传参考音频</button>
+            <span class="hint">给角色配音色用；mp3/wav/m4a，3–10 秒最稳</span></div>
+          <div id="h3v-audList"></div>
+        </details>
+
         <div style="display:none"><select id="h3v-scene"></select></div>
 
         <div class="row">
@@ -269,6 +276,8 @@
       $('#h3v-sceneConc').value = String(S.sceneConc || 3);
       $('#h3v-sceneConc').onchange = function () { S.sceneConc = Number($('#h3v-sceneConc').value) || 3; saveS(); };
     }
+    if ($('#h3v-audUp')) $('#h3v-audUp').onclick = uploadAudioLib;
+    renderAudioLib();
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
     renderCharList();
@@ -515,6 +524,15 @@
     });
   }
 
+  function charAudioFor(file) {
+    if (!file) return '';
+    for (let i = 0; i < 6; i++) {
+      const sel = document.querySelector('#h3v-views select[data-v="' + i + '"]');
+      if (sel && sel.value === file) return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
+    }
+    return '';
+  }
+
   async function submitBlock(blockText, seconds, sceneOverride, filesOverride) {
     const images = [];
     for (let i = 0; i < 6; i++) {
@@ -701,7 +719,8 @@
 8) 正文里的心理活动、内心独白（斜体、*…*、【心想】这类）要转成画外音旁白，写在 detailed_description 里：<Subject N> (Sx, off-screen voice-over) says, <d>[Chinese] …</d>；角色真正说出口的话写 <Subject N> (Sx) says, <d>[Chinese] …</d>。两种都要保留，不要丢。
 9) 六段每段只出现一次；不要在 detailed_description 里重新开始写 subject_definitions / summary / retention_analysis。
 10) 总时长必须与用户给的秒数一致；不要写成剧情梗概。
-12) 在 [[H3]] 内**第一行**先输出一行机器标记（只这一行，不要解释）：<!--CAST: 角色名1, 角色名2 | SCENE: 场景名-->；角色名、场景名必须从用户给的【素材清单】里照抄（没有清单才用正文原字）。然后六段；六段里 <Subject 1..k> 与 <Picture 1..k> 的顺序必须与 CAST 里角色顺序一致，场景图永远排在最后一位。只使用 CAST 里出现的角色。\n13) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
+12) 在 [[H3]] 内**第一行**先输出一行机器标记（只这一行，不要解释）：<!--CAST: 角色名1, 角色名2 | SCENE: 场景名-->；角色名、场景名必须从用户给的【素材清单】里照抄（没有清单才用正文原字）。然后六段；六段里 <Subject 1..k> 与 <Picture 1..k> 的顺序必须与 CAST 里角色顺序一致，场景图永远排在最后一位。只使用 CAST 里出现的角色。\n13) 如果给了音频参考：在 subject_definitions 里按角色顺序写 <Audio N> is the voice-timbre reference for <Subject N>.（最多 3 条），台词仍用 <d>[Chinese] …</d>。
+14) 每个分段的 subject_definitions 都必须写出参考图编号：角色写 <Subject 1> is … in <Picture 1>，场景写 <Subject 2> is … in <Picture 2>；detailed_description 里首次出现时也要写 the shot begins from <Picture 1> 或 in <Picture 2>。绝对不要只写 keep consistent with reference 而不给编号——不写编号，参考图就等于没用。`;
 
   function sixUser(text) {
     return '正文：\n"""\n' + text + '\n"""\n\n按上面这段正文写六段视频提示词（[[H3]]…[[/H3]]）。';
@@ -1328,11 +1347,13 @@
       html += '<div class="row">' +
         '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(file) + '">' +
         '<input data-cn="' + i + '" value="' + esc(S.charNames[i] || '') + '" placeholder="角色名（中文）" style="flex:1">' +
+        '<select data-ca="' + i + '" style="max-width:130px;flex:none"></select>' +
         '<button data-cdel="' + i + '" style="flex:none">删</button></div>';
     }
     box.innerHTML = html || '<div class="hint">还没有角色图，点上面「+ 上传角色图」</div>';
     const sum = $('#h3v-charSum');
     if (sum) sum.textContent = '角色库（' + (html ? html.split('data-cn=').length - 1 : 0) + ' 张，点开）';
+    fillCharAudioSelects();
     box.querySelectorAll('input[data-cn]').forEach(function (el) {
       const i = Number(el.dataset.cn);
       el.oninput = function () { S.charNames[i] = el.value.trim(); saveS(); };
@@ -1448,6 +1469,74 @@
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
       status('ok', '场景库已更新');
+    };
+    inp.click();
+  }
+
+  /* ---------- 音频库（角色音色参考） ---------- */
+  const AUDIOLIB = (function () {
+    try { const a = JSON.parse(localStorage.getItem('h3v.audios') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
+  })();
+  const saveAudios = function () { try { localStorage.setItem('h3v.audios', JSON.stringify(AUDIOLIB)); } catch (_) {} };
+
+  function renderAudioLib() {
+    const box = $('#h3v-audList');
+    if (!box) return;
+    const sum = $('#h3v-audSum');
+    if (sum) sum.textContent = '音频库（' + AUDIOLIB.length + ' 条，点开）';
+    if (!AUDIOLIB.length) { box.innerHTML = '<div class="hint">还没有音频</div>'; return; }
+    let html = '';
+    AUDIOLIB.forEach(function (a, i) {
+      html += '<div class="row"><input data-an="' + i + '" value="' + esc(a.name || '') + '" placeholder="音色名（如：男主）" style="flex:1">' +
+        '<span class="hint">' + esc(a.file || '') + '</span>' +
+        '<button data-adel="' + i + '" style="flex:none">删</button></div>';
+    });
+    box.innerHTML = html;
+    box.querySelectorAll('input[data-an]').forEach(function (el) {
+      const i = Number(el.dataset.an);
+      el.oninput = function () { AUDIOLIB[i].name = el.value.trim(); saveAudios(); fillCharAudioSelects(); };
+    });
+    box.querySelectorAll('button[data-adel]').forEach(function (el) {
+      const i = Number(el.dataset.adel);
+      el.onclick = function () { AUDIOLIB.splice(i, 1); saveAudios(); renderAudioLib(); fillCharAudioSelects(); };
+    });
+    fillCharAudioSelects();
+  }
+
+  function fillCharAudioSelects() {
+    const box = $('#h3v-charList');
+    if (!box) return;
+    box.querySelectorAll('select[data-ca]').forEach(function (sel) {
+      const i = Number(sel.dataset.ca);
+      const cur = (Array.isArray(S.charAudio) ? S.charAudio[i] : '') || '';
+      sel.innerHTML = '<option value="">音色：无</option>' + AUDIOLIB.map(function (a) {
+        return '<option value="' + esc(a.file) + '">' + esc(a.name || a.file) + '</option>';
+      }).join('');
+      sel.value = cur;
+      sel.onchange = function () {
+        if (!Array.isArray(S.charAudio)) S.charAudio = ['', '', '', '', '', ''];
+        S.charAudio[i] = sel.value; saveS();
+      };
+    });
+  }
+
+  function uploadAudioLib() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'audio/*'; inp.multiple = true;
+    inp.onchange = async function () {
+      const files = Array.from(inp.files || []);
+      for (let k = 0; k < files.length; k++) {
+        try {
+          status('run', '上传音频 ' + (k + 1) + '/' + files.length + '…');
+          const j = await fetch(api('/api/upload?name=' + encodeURIComponent(files[k].name) + '&kind=audio'), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: files[k],
+          }).then(function (r) { return r.json(); });
+          if (j.error) throw new Error(j.error);
+          AUDIOLIB.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), file: j.name, ts: Date.now() });
+          saveAudios(); renderAudioLib();
+        } catch (e) { status('err', '上传失败：' + e.message); }
+      }
+      status('ok', '音频库已更新，去角色库里给角色选音色');
     };
     inp.click();
   }
