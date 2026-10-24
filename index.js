@@ -177,15 +177,23 @@
           <span class="hint" id="h3v-blockHint"></span>
         </div>
 
+
         <div class="row" style="margin-top:8px">
           <button class="primary" id="h3v-run">生成这一条</button>
           <button id="h3v-runAll">全部生成</button>
-          <label style="min-width:auto">从</label>
-          <input type="number" id="h3v-from" min="1" step="1" value="1" style="max-width:56px;flex:none">
-          <label style="min-width:auto">到</label>
-          <input type="number" id="h3v-to" min="1" step="1" value="2" style="max-width:56px;flex:none">
-          <button id="h3v-runRange" style="flex:none">生成区间</button>
-          <input type="number" id="h3v-videoConc" min="1" max="10" step="1" value="2" style="max-width:72px;flex:none" title="同时跑几条">
+        </div>
+
+        <div class="row">
+          <label style="min-width:auto">区间</label>
+          <input type="number" id="h3v-from" min="1" step="1" value="1" style="max-width:60px;flex:none">
+          <label style="min-width:auto">→</label>
+          <input type="number" id="h3v-to" min="1" step="1" value="2" style="max-width:60px;flex:none">
+          <button id="h3v-runRange" style="flex:none">生成这个区间</button>
+        </div>
+
+        <div class="row">
+          <label style="min-width:auto">并发</label>
+          <input type="number" id="h3v-videoConc" min="1" max="10" step="1" value="2" style="max-width:64px;flex:none">
           <label style="min-width:auto">画风</label>
           <select id="h3v-videoStyle" style="max-width:150px;flex:none">
             <option value="anime">动漫赛璐璐</option>
