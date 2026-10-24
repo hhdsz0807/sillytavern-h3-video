@@ -1446,12 +1446,13 @@
     if (!list.length) { status('ok', '这些场景库里都已经有了，跳过生成'); return; }
     const styleKey = $('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime';
     const styleText = SCENE_STYLE[styleKey] || SCENE_STYLE.anime;
-    const conc = Math.max(1, Math.min(5, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3));
+    const conc = Math.max(1, Math.min(4, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3));
     const btn = $('#h3v-sceneGen');
     btn.disabled = true;
     jobBegin('生成场景（' + list.length + ' 张 · 并发 ' + conc + '）');
     pgSet(0);
     let done = 0, ok = 0, idx = 0;
+    let firstErr = '';
 
     async function submitOne(s, tries) {
       try {
@@ -1492,6 +1493,7 @@
           ok++;
         } catch (e) {
           LOG('scene fail', s.name, e);
+          if (!firstErr) firstErr = (s.name + '：' + (e && e.message ? e.message : e));
         }
         done++;
         status('run', '场景进度 ' + done + '/' + list.length + '（成功 ' + ok + '）…');
@@ -1506,7 +1508,8 @@
     btn.disabled = false;
     pgSet(100);
     renderSceneListBox();
-    status(ok ? 'ok' : 'err', '场景完成 ' + ok + '/' + list.length + '（画风：' + styleKey + '），已存进场景库');
+    status(ok ? 'ok' : 'err', '场景完成 ' + ok + '/' + list.length + '（画风：' + styleKey + '）'
+      + (ok ? '，已存进场景库' : '') + (firstErr ? '\n首个错误：' + firstErr.slice(0, 160) : ''));
   }
 
   function waitKrea2(taskId) {
