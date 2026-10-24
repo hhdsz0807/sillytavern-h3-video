@@ -151,6 +151,7 @@
           <select id="h3v-aiMode" style="flex:1">
             <option value="st">用酒馆当前连接 / 对话补全预设（和主界面一样）</option>
             <option value="api">自定义 API</option>
+            <option value="agent">本机 Agent（DSH Pocket / 虚拟局域网）</option>
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <label style="min-width:auto">并发</label>
@@ -164,7 +165,17 @@
           <button id="h3v-aidiag" style="flex:none">诊断 ST</button>
         </div>
         <div id="h3v-apiBox" style="display:none">
-                        <div class="row"><label>补全预设</label>
+                                <div class="row"><label>Agent 地址</label>
+          <input type="text" id="h3v-agentUrl" placeholder="http://10.6.22.1:3081" style="flex:1">
+          <input type="password" id="h3v-agentPin" placeholder="PIN/Token" style="max-width:140px">
+        </div>
+        <div class="row"><label>Agent 路径</label>
+          <input type="text" id="h3v-agentPath" value="/api/chat" style="flex:1;max-width:220px">
+          <button id="h3v-agentProbe" style="flex:none">探测接口</button>
+          <span class="hint" id="h3v-agentState">走手机 APK 转发，绕过浏览器 CORS</span>
+        </div>
+
+        <div class="row"><label>补全预设</label>
           <select id="h3v-presetSel" style="flex:1;max-width:280px"></select>
           <button id="h3v-presetReload" style="flex:none">刷新列表</button>
         </div>
@@ -290,6 +301,15 @@
     $('#h3v-run').onclick = runVideo;
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
+    if ($('#h3v-agentUrl')) {
+      $('#h3v-agentUrl').value = S.agentUrl || 'http://10.6.22.1:3081';
+      $('#h3v-agentPath').value = S.agentPath || '/api/chat';
+      $('#h3v-agentPin').value = S.agentPin || '';
+      $('#h3v-agentUrl').onchange = function () { S.agentUrl = $('#h3v-agentUrl').value.trim(); saveS(); };
+      $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/api/chat'; saveS(); };
+      $('#h3v-agentPin').onchange = function () { S.agentPin = $('#h3v-agentPin').value.trim(); saveS(); };
+    }
+    if ($('#h3v-agentProbe')) $('#h3v-agentProbe').onclick = agentProbe;
     if ($('#h3v-presetSel')) {
       renderPresetSel();
       $('#h3v-presetSel').onchange = function () {
@@ -1671,10 +1691,85 @@
     if (!extra) return [sys, user];
     return [extra + '\n\n' + sys, user];
   }
+  /* ---------- 本机 Agent（DSH Pocket） ---------- */
+  function agentCfg() {
+    const base = (S.agentUrl || 'http://10.6.22.1:3081').replace(/\/+$/, '');
+    const path = S.agentPath || '/api/chat';
+    const pin = S.agentPin || '';
+    return { base: base, path: path, pin: pin, url: base + path };
+  }
+
+  async function agentHttp(url, bodyStr, pin) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (pin) { headers['Authorization'] = 'Bearer ' + pin; headers['X-Pin'] = pin; }
+    const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: bodyStr });
+    return r; // {ok,status,body|error}
+  }
+
+  function pickAgentText(json) {
+    if (!json) return '';
+    if (typeof json === 'string') return json;
+    const c = json.choices && json.choices[0];
+    if (c && c.message && typeof c.message.content === 'string') return c.message.content;
+    if (c && typeof c.text === 'string') return c.text;
+    if (typeof json.content === 'string') return json.content;
+    if (typeof json.text === 'string') return json.text;
+    if (typeof json.reply === 'string') return json.reply;
+    if (typeof json.message === 'string') return json.message;
+    if (json.message && typeof json.message.content === 'string') return json.message.content;
+    if (json.data && typeof json.data.content === 'string') return json.data.content;
+    if (Array.isArray(json.messages) && json.messages.length) {
+      const last = json.messages[json.messages.length - 1];
+      if (last && typeof last.content === 'string') return last.content;
+    }
+    return '';
+  }
+
+  async function agentGenerate(sys, user, len) {
+    const cfg = agentCfg();
+    const body = {
+      model: S.aiModel || 'default',
+      messages: [ { role: 'system', content: sys }, { role: 'user', content: user } ],
+      max_tokens: MAXTOK_OVERRIDE || Number(S.maxTokens || 4000),
+      stream: false,
+    };
+    jobLabel('调本机 Agent');
+    const r = await agentHttp(cfg.url, JSON.stringify(body), cfg.pin);
+    if (!r || !r.ok) {
+      const detail = r && (r.error || (r.status + ' ' + String(r.body || '').slice(0, 140)));
+      throw new Error('Agent 调用失败：' + detail);
+    }
+    let j = null;
+    try { j = JSON.parse(r.body); } catch (_) { return String(r.body || '').trim(); }
+    const txt = pickAgentText(j);
+    if (txt) return txt;
+    throw new Error('Agent 返回里没找到文本：' + String(r.body || '').slice(0, 160));
+  }
+
+  async function agentProbe() {
+    const cfg = agentCfg();
+    const cands = ['/api/chat', '/api/pocket/chat', '/api/agent/chat', '/api/agent', '/api/send', '/api/message',
+      '/v1/chat/completions', '/chat/completions', '/api/completions', '/api/session', '/api/ping', '/'];
+    const lines = [];
+    for (let i = 0; i < cands.length; i++) {
+      const url = cfg.base + cands[i];
+      try {
+        const r = await agentHttp(url, JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 8 }), cfg.pin);
+        const code = r && r.status ? r.status : (r && r.ok ? 200 : 'ERR');
+        const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 70);
+        lines.push(cands[i] + ' → ' + code + (code === 200 ? ' ✅ ' : ' ') + snip);
+      } catch (e) { lines.push(cands[i] + ' → ' + e.message.slice(0, 50)); }
+    }
+    const box = $('#h3v-agentState');
+    if (box) box.textContent = '探测完成，见状态区';
+    status('ok', 'Agent 探测：\n' + lines.join('\n'));
+  }
+
   function callAI(sys, user, len) {
     jobLabel(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
     const one = function () {
       return withPreset(sys, user).then(function (pair) {
+        if (S.aiMode === 'agent') return agentGenerate(pair[0], pair[1], len);
         return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
       });
     };
