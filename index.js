@@ -166,7 +166,7 @@
         </div>
         <div id="h3v-apiBox" style="display:none">
                                 <div class="row"><label>Agent 地址</label>
-          <input type="text" id="h3v-agentUrl" placeholder="http://10.6.22.1:3081" style="flex:1">
+          <input type="text" id="h3v-agentUrl" placeholder="http://127.0.0.1:35869/?token=..." style="flex:1">
           <input type="password" id="h3v-agentPin" placeholder="PIN/Token" style="max-width:140px">
         </div>
         <div class="row"><label>Agent 路径</label>
@@ -1693,20 +1693,29 @@
   }
   /* ---------- 本机 Agent（DSH Pocket） ---------- */
   function agentCfg() {
-    const base = (S.agentUrl || 'http://10.6.22.1:3081').replace(/\/+$/, '');
-    const path = S.agentPath || '/api/chat';
-    const pin = S.agentPin || '';
-    return { base: base, path: path, pin: pin, url: base + path };
+    let raw = String(S.agentUrl || 'http://127.0.0.1:35869').trim();
+    let token = String(S.agentToken || S.agentPin || '');
+    // 允许直接粘 http://host:port/?token=xxx
+    const m = raw.match(/[?&]token=([^&#]+)/i);
+    if (m) { token = decodeURIComponent(m[1]); raw = raw.replace(/[?&]token=[^&#]+/i, ''); }
+    raw = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    return { base: raw, path: S.agentPath || '/api/chat', pin: token, token: token, url: raw + (S.agentPath || '/api/chat') };
   }
 
   async function agentHttp(url, bodyStr, pinOverride) {
     const cfg = agentCfg();
     const headers = { 'Content-Type': 'application/json' };
     const pin = (pinOverride === undefined) ? cfg.pin : pinOverride;
-    if (pin) { headers['Authorization'] = 'Bearer ' + pin; headers['X-Pin'] = pin; }
-    if (S.agentToken) headers['Authorization'] = 'Bearer ' + S.agentToken;
+    let full = url;
+    if (pin) {
+      headers['Authorization'] = 'Bearer ' + pin;
+      headers['X-Token'] = pin;
+      headers['X-Api-Key'] = pin;
+      headers['X-Pin'] = pin;
+      full = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(pin);
+    }
     if (S.agentCookie) headers['Cookie'] = S.agentCookie;
-    const r = await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: bodyStr });
+    const r = await jpost('/api/fetch', { url: full, method: 'POST', headers: headers, body: bodyStr });
     return r;
   }
 
@@ -1783,8 +1792,9 @@
     const cfg = agentCfg();
     let loginInfo = '（未登录）';
     try { const lg = await agentLogin(); if (lg) loginInfo = '登录成功：' + lg.path + (lg.token ? ' token' : '') + (lg.cookie ? ' cookie' : ''); } catch (e) { loginInfo = '登录失败：' + e.message; }
-    const cands = ['/api/chat', '/api/pocket/chat', '/api/agent/chat', '/api/agent', '/api/send', '/api/message',
-      '/v1/chat/completions', '/chat/completions', '/api/completions', '/api/session', '/api/ping', '/'];
+    const cands = ['/api/chat', '/api/agent/chat', '/api/agent', '/api/message', '/api/send', '/api/complete',
+      '/api/completions', '/api/generate', '/v1/chat/completions', '/chat/completions', '/v1/completions',
+      '/api/session', '/api/sessions', '/api/status', '/api/health', '/api/ping', '/'];
     const lines = [];
     for (let i = 0; i < cands.length; i++) {
       const url = cfg.base + cands[i];
