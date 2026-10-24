@@ -78,7 +78,7 @@
           <button id="h3v-charUp" style="flex:none">+ 上传角色图</button>
           <span class="hint" id="h3v-charHint">每张填个中文名；分段提示词只会从这些名字里选</span>
         </div>
-        <div id="h3v-charList"></div>
+        <details id="h3v-charDetails" style="margin:2px 0 10px"><summary id="h3v-charSum" style="cursor:pointer;color:#8b98ab;font-size:13px">角色库（点开）</summary><div id="h3v-charList"></div></details>
 
         <div style="display:none"><select id="h3v-scene"></select></div>
 
@@ -122,7 +122,7 @@
           <span class="hint">可改名、删；名字就是 AI 能选的场景名</span>
         </div>
         <div class="row" style="display:none"><select id="h3v-sceneLib"></select><img id="h3v-sceneLibPv" class="pv" alt=""></div>
-        <div id="h3v-sceneListBox"></div>
+        <details id="h3v-sceneDetails" style="margin:2px 0 10px"><summary id="h3v-sceneSum" style="cursor:pointer;color:#8b98ab;font-size:13px">场景库（点开）</summary><div id="h3v-sceneListBox"></div></details>
 
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
@@ -1307,6 +1307,8 @@
         '<button data-cdel="' + i + '" style="flex:none">删</button></div>';
     }
     box.innerHTML = html || '<div class="hint">还没有角色图，点上面「+ 上传角色图」</div>';
+    const sum = $('#h3v-charSum');
+    if (sum) sum.textContent = '角色库（' + (html ? html.split('data-cn=').length - 1 : 0) + ' 张，点开）';
     box.querySelectorAll('input[data-cn]').forEach(function (el) {
       const i = Number(el.dataset.cn);
       el.oninput = function () { S.charNames[i] = el.value.trim(); saveS(); };
@@ -1326,6 +1328,8 @@
   function renderSceneListBox() {
     const box = $('#h3v-sceneListBox');
     if (!box) return;
+    const ssum = $('#h3v-sceneSum');
+    if (ssum) ssum.textContent = '场景库（' + SCENES.length + ' 张，点开）';
     if (!SCENES.length) { box.innerHTML = '<div class="hint">场景库还是空的：先用上面「按正文出场景提示词 → 生成全部场景」，或点「+ 上传场景图」</div>'; return; }
     let html = '';
     SCENES.forEach(function (s, i) {
