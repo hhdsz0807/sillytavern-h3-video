@@ -1371,6 +1371,16 @@
     try { const a = JSON.parse(localStorage.getItem('h3v.chars') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
   })();
   const saveChars = function () { try { localStorage.setItem('h3v.chars', JSON.stringify(CHARLIB)); } catch (_) {} };
+  // 旧数据迁移：早期角色存在 S.views 里
+  (function () {
+    try {
+      if (CHARLIB.length) return;
+      const v = Array.isArray(S.views) ? S.views : [];
+      const nm = Array.isArray(S.charNames) ? S.charNames : [];
+      v.forEach(function (f, i) { if (f) CHARLIB.push({ file: f, name: nm[i] || ('角色' + (i + 1)) }); });
+      if (CHARLIB.length) saveChars();
+    } catch (_) {}
+  })();
 
   function thumbUrl(file) {
     return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
