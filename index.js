@@ -996,18 +996,32 @@
 
   function vurl(u) { return /^https?:/i.test(u) ? u : api(u); }
 
+  let ONLY_RUN = false;
+
+  function shownVideos() {
+    if (ONLY_RUN && RUN_TAG) {
+      return VIDEOS.map(function (v, i) { return { v: v, i: i }; })
+        .filter(function (x) { return String(x.v.name || '').indexOf(RUN_TAG) === 0; });
+    }
+    return VIDEOS.map(function (v, i) { return { v: v, i: i }; });
+  }
+
   function renderOut() {
     const box = $('#h3v-out');
     if (!box) return;
+    const pairs = shownVideos();
     let head = '';
     if (VIDEOS.length) {
-      head = '<div class="row" style="margin:8px 0">'
-        + '<button id="h3v-merge" style="flex:none">合并成一条（' + VIDEOS.length + '）</button>'
-        + '<button id="h3v-clear" style="flex:none">清空列表</button>'
-        + '<span class="hint">合并按列表顺序；删除只删手机里的文件</span></div>';
+      head = '<div class="row" style="margin:8px 0;flex-wrap:wrap">'
+        + '<button id="h3v-merge" style="flex:none">合并成一条（' + pairs.length + '）</button>'
+        + (RUN_TAG ? '<button id="h3v-onlyRun" style="flex:none">' + (ONLY_RUN ? '显示全部' : '只看本次 ' + RUN_TAG) + '</button>' : '')
+        + '<button id="h3v-clear" style="flex:none">清空列表</button></div>'
+        + '<div class="hint">本次标记 ' + (RUN_TAG || '—') + '：文件名形如 ' + (RUN_TAG || 'R0000') + '_s03.mp4；带「← 本次」的就是这一轮</div>';
     }
-    const body = VIDEOS.map(function (v, i) {
-      return '<div style="margin-top:10px"><div class="hint">' + esc(v.label || '') + ' · ' + esc(v.name || '') + '</div>'
+    const body = pairs.map(function (pair) {
+      const v = pair.v, i = pair.i;
+      const isThisRun = RUN_TAG && String(v.name || '').indexOf(RUN_TAG) === 0;
+      return '<div style="margin-top:10px"><div class="hint">' + esc(v.label || '') + ' · ' + esc(v.name || '') + (isThisRun ? ' ← 本次' : '') + '</div>'
         + '<video src="' + vurl(v.url) + '" controls playsinline></video>'
         + '<div><a href="' + vurl(v.url) + '" download="' + esc(v.name || 'h3.mp4') + '">下载</a>'
         + ' <button data-vdel="' + i + '" style="margin-left:8px">删</button></div></div>';
@@ -1031,9 +1045,12 @@
     });
     const m = $('#h3v-merge');
     if (m) m.onclick = mergeAll;
+    const only = $('#h3v-onlyRun');
+    if (only) only.onclick = function () { ONLY_RUN = !ONLY_RUN; renderOut(); };
     const c = $('#h3v-clear');
     if (c) c.onclick = function () { VIDEOS.length = 0; renderOut(); };
   }
+
 
   async function mergeAll() {
     if (VIDEOS.length < 2) { status('err', '至少两条才能合并'); return; }
@@ -1076,7 +1093,8 @@
     if (b < a) { const tmp = a; a = b; b = tmp; }
     const btn = $('#h3v-runRange');
     if (btn) btn.disabled = true;
-    jobBegin('生成区间 ' + a + '–' + b + '（串行）');
+    newRunTag();
+    jobBegin('生成区间 ' + a + '–' + b + '（串行）· 标记 ' + RUN_TAG);
     pgSet(0);
     let okN = 0, coins = 0;
     for (let i = a - 1; i < b; i++) {
@@ -1107,7 +1125,8 @@
     const sec = blockSeconds(b);
     const btn = $('#h3v-run');
     btn.disabled = true;
-    jobBegin('生成视频 · 第' + (idx + 1) + '条');
+    newRunTag();
+    jobBegin('生成视频 · 第' + (idx + 1) + '条 · 标记 ' + RUN_TAG);
     try {
       const r = await runOne(b, sec, '第' + (idx + 1) + '条', SEGCFG[idx], SEGIMG[idx], idx);
       showVideos(r, '第 ' + (idx + 1) + ' 条 · ' + sec + 's');
@@ -1129,7 +1148,8 @@
     if (S.chain !== false) { conc = 1; status('run', '已开启「接上一段尾帧」→ 只能串行跑（否则后一段拿不到前一段的尾帧）'); }
     const btn = $('#h3v-runAll');
     btn.disabled = true;
-    jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc);
+    newRunTag();
+    jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc + ' · 标记 ' + RUN_TAG);
     pgSet(0);
     let next = 0, okN = 0, doneN = 0, coins = 0;
 
