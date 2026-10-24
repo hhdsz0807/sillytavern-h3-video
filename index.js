@@ -102,6 +102,18 @@
           <button id="h3v-sceneGen" style="flex:none">生成全部场景</button>
           <span class="hint" id="h3v-sceneState"></span>
         </div>
+        <div class="row"><label>画风</label>
+          <select id="h3v-sceneStyle" style="flex:1;max-width:260px">
+            <option value="anime">动漫赛璐璐（2D 平涂）</option>
+            <option value="real">写实实拍（摄影）</option>
+            <option value="cinematic">电影感（写实+调色）</option>
+            <option value="watercolor">水彩/绘本</option>
+          </select>
+          <label style="min-width:auto">并发</label>
+          <select id="h3v-sceneConc" style="max-width:80px;flex:none">
+            <option>1</option><option selected>3</option><option>5</option>
+          </select>
+        </div>
         <textarea id="h3v-sceneList" rows="4" placeholder="每行一个场景：场景名|英文出图提示词（会自动补 no people / clean background）"></textarea>
         <div class="row"><label>场景库</label>
           <select id="h3v-sceneLib" style="flex:1"></select>
@@ -240,6 +252,14 @@
     }
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
     if ($('#h3v-aidiag')) $('#h3v-aidiag').onclick = aiDiag;
+    if ($('#h3v-sceneStyle')) {
+      $('#h3v-sceneStyle').value = S.sceneStyle || 'anime';
+      $('#h3v-sceneStyle').onchange = function () { S.sceneStyle = $('#h3v-sceneStyle').value; saveS(); };
+    }
+    if ($('#h3v-sceneConc')) {
+      $('#h3v-sceneConc').value = String(S.sceneConc || 3);
+      $('#h3v-sceneConc').onchange = function () { S.sceneConc = Number($('#h3v-sceneConc').value) || 3; saveS(); };
+    }
     if ($('#h3v-scenePlan')) $('#h3v-scenePlan').onclick = scenePlan;
     if ($('#h3v-sceneGen')) $('#h3v-sceneGen').onclick = sceneGen;
     if ($('#h3v-sceneLib')) {
@@ -1029,6 +1049,13 @@
   })();
   const saveScenes = function () { try { localStorage.setItem('h3v.scenes', JSON.stringify(SCENES)); } catch (_) {} };
 
+  const SCENE_STYLE = {
+    anime: '2D anime background art, cel-shaded, clean lineart, flat color fills, two-tone shading, no photorealistic texture, no 3D render',
+    real: 'photorealistic photograph, natural light, 35mm lens, realistic materials, fine detail',
+    cinematic: 'cinematic film still, photorealistic, moody color grading, shallow depth of field',
+    watercolor: 'watercolor illustration, soft washes, paper texture, hand-painted look, no photoreal detail',
+  };
+
   const SCENE_SYS = '你是场景设定师。读用户给的角色扮演/小说正文，找出这段里出现过的**所有场景**（同一个地方不同时间算一个），为每个场景写一条**英文出图提示词**。\n' +
     '输出格式：每行一条，纯文本，不要编号解释：\n场景名|英文提示词\n' +
     '提示词要求：空间类型 + 关键陈设（3–6 个）+ 材质/色调 + 光源方向与时间 + 镜头（wide shot, 35mm）+ no people, clean background, empty scene；60–100 单词；不要出现人物、文字、水印。\n' +
@@ -1047,11 +1074,12 @@
   }
 
   async function scenePlan() {
+    const st = SCENE_STYLE[$('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime'] || SCENE_STYLE.anime;
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先点楼层 🎬'); return; }
     status('run', '正在从正文提取场景…');
     try {
-      const out = await callAI(SCENE_SYS, '正文：\n"""\n' + text + '\n"""', 1500);
+      const out = await callAI(SCENE_SYS, '画风要求：' + st + '\n正文：\n"""\n' + text + '\n"""', 1500);
       const list = parseSceneLines(out);
       if (!list.length) throw new Error('模型没给出场景');
       $('#h3v-sceneList').value = list.map(function (s) { return s.name + '|' + s.prompt; }).join('\n');
@@ -1063,43 +1091,66 @@
     const raw = $('#h3v-sceneList').value.trim();
     if (!raw) { status('err', '先点「按正文出场景提示词」或手写'); return; }
     const list = parseSceneLines(raw);
+    const styleKey = $('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime';
+    const styleText = SCENE_STYLE[styleKey] || SCENE_STYLE.anime;
+    const conc = Math.max(1, Math.min(5, Number($('#h3v-sceneConc') ? $('#h3v-sceneConc').value : 3) || 3));
     const btn = $('#h3v-sceneGen');
     btn.disabled = true;
-    jobBegin('生成场景');
-    let done = 0;
-    for (let i = 0; i < list.length; i++) {
-      const s = list[i];
-      jobLabel('场景 ' + (i + 1) + '/' + list.length + '：' + s.name);
-      status('run', '场景 ' + (i + 1) + '/' + list.length + ' 出图中…（约 40 秒/张）');
+    jobBegin('生成场景（' + list.length + ' 张 · 并发 ' + conc + '）');
+    let done = 0, ok = 0, idx = 0;
+
+    async function submitOne(s, tries) {
       try {
-        const j = await jpost('/api/krea2/run', {
+        return await jpost('/api/krea2/run', {
           mode: 't2i',
-          prompt: s.prompt + ', no people, clean background, empty scene',
+          prompt: styleText + ', ' + s.prompt + ', no people, clean background, empty scene',
           aspect: '16:9 (Widescreen)',
           mp: 1.5,
           prefix: 'scene',
         });
-        const file = await waitKrea2(j.taskId);
-        // 把出图搬进 input 目录，视频那边才能直接选
-        const blob = await (await fetch(api(file))).blob();
-        const fd = new FormData();
-        fd.append('file', blob, 'scene_' + Date.now() + '.png');
-        const up = await fetch(api('/api/upload?name=' + encodeURIComponent('scene_' + Date.now() + '.png') + '&kind=image'), {
-          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
-        }).then(r => r.json());
-        if (up.error) throw new Error(up.error);
-        SCENES.unshift({ name: s.name, prompt: s.prompt, file: up.name, ts: Date.now() });
-        saveScenes();
-        done++;
       } catch (e) {
-        LOG('scene fail', s.name, e);
-        status('err', '场景「' + s.name + '」失败：' + e.message + '（继续下一个）');
+        const msg = String(e && e.message || '');
+        if (tries > 0 && /并发|busy|并发已满|RUNNING/i.test(msg)) {
+          await new Promise(r => setTimeout(r, 4000));
+          return submitOne(s, tries - 1);
+        }
+        throw e;
       }
     }
+
+    async function worker() {
+      while (idx < list.length) {
+        const i = idx++;
+        const s = list[i];
+        jobLabel('场景 ' + (i + 1) + '/' + list.length + '：' + s.name);
+        try {
+          const j = await submitOne(s, 8);
+          const file = await waitKrea2(j.taskId);
+          const blob = await (await fetch(api(file))).blob();
+          const fname = 'scene_' + Date.now() + '_' + i + '.png';
+          const up = await fetch(api('/api/upload?name=' + encodeURIComponent(fname) + '&kind=image'), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
+          }).then(r => r.json());
+          if (up.error) throw new Error(up.error);
+          SCENES.unshift({ name: s.name, prompt: s.prompt, style: styleKey, file: up.name, ts: Date.now() });
+          saveScenes();
+          ok++;
+        } catch (e) {
+          LOG('scene fail', s.name, e);
+        }
+        done++;
+        status('run', '场景进度 ' + done + '/' + list.length + '（成功 ' + ok + '）…');
+      }
+    }
+
+    const workers = [];
+    for (let k = 0; k < conc; k++) workers.push(worker());
+    await Promise.all(workers);
+
     jobEnd();
     btn.disabled = false;
     refreshSceneLib();
-    status('ok', '场景完成 ' + done + '/' + list.length + '，已存进场景库');
+    status(ok ? 'ok' : 'err', '场景完成 ' + ok + '/' + list.length + '（画风：' + styleKey + '），已存进场景库');
   }
 
   function waitKrea2(taskId) {
