@@ -121,6 +121,7 @@
             <option value="anime">动漫赛璐璐（2D 平涂）</option>
             <option value="real">写实实拍（摄影）</option>
             <option value="cinematic">电影感（写实+调色）</option>
+            <option value="mixed">混合（角色2D+场景写实）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
           <label style="min-width:auto">并发</label>
@@ -1521,6 +1522,7 @@
     real: 'Visual style: photorealistic live-action footage, natural light, real materials, 35mm lens.',
     cinematic: 'Visual style: cinematic live-action, photorealistic, moody color grading, shallow depth of field.',
     watercolor: 'Visual style: watercolor illustration animation, soft washes, paper texture, hand-painted look, no photoreal detail.',
+    mixed: 'Visual style: mixed media — ALL characters are 2D anime (cel-shaded, clean lineart, flat color); ALL environments and props are photorealistic live-action (real materials, natural light, photographic detail). Keep the two treatments clearly separated: anime figures composited into a photographic world, never blending their rendering.',
   };
   const LIVE_WORDS = [
     [/\bnaturalistic live[- ]action\b/gi, '2D anime style'],
@@ -1540,7 +1542,7 @@
     // 1) 先把旧的风格行整行删掉（否则替换规则会把风格行自己也改坏）
     s = s.replace(/^[ \t]*Visual style:.*$/gim, '');
     // 2) 再替换正文里的实拍词
-    if (key === 'anime' || key === 'watercolor') {
+    if (key === 'anime' || key === 'watercolor') {  // mixed 保留 photorealistic 词
       LIVE_WORDS.forEach(function (pair) { s = s.replace(pair[0], pair[1]); });
       s = s.replace(/\b(\w+)\s+\1\b/gi, '$1');
       s = s.replace(/[ \t]{2,}/g, ' ');
@@ -1615,6 +1617,7 @@
     real: 'photorealistic photograph, natural light, 35mm lens, realistic materials, fine detail',
     cinematic: 'cinematic film still, photorealistic, moody color grading, shallow depth of field',
     watercolor: 'watercolor illustration, soft washes, paper texture, hand-painted look, no photoreal detail',
+    real: 'photorealistic photograph, natural light, 35mm lens, real materials, fine detail',
   };
 
   const SCENE_SYS = '你是场景设定师。读用户给的角色扮演/小说正文，找出这段里出现过的**所有场景**（同一个地方不同时间算一个），为每个场景写一条**英文出图提示词**。\n' +
@@ -2005,8 +2008,23 @@
   }
 
   async function accImport() {
-    const box = $('#h3v-accBox');
-    if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    // 直接选文件导入（导出的是 .json 文件，不用手贴）
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.json,application/json';
+    inp.onchange = async function () {
+      const f = (inp.files || [])[0];
+      if (!f) return;
+      try {
+        const txt = await f.text();
+        const ta = $('#h3v-accJson');
+        if (ta) ta.value = txt;
+        await accImportDo(txt);
+      } catch (e) {
+        status('err', '读取文件失败：' + e.message);
+      }
+    };
+    inp.click();
   }
 
   async function accImportDo() {
