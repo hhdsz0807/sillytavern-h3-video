@@ -182,6 +182,7 @@
 
       <div class="foot" style="flex:none;border-top:1px solid #26303c;background:#0e141b;padding:8px 12px;">
         <div id="h3v-status"></div>
+        <div id="h3v-pgWrap" style="height:6px;background:#1c222c;border-radius:99px;overflow:hidden;margin-top:6px;display:none"><i id="h3v-pg" style="display:block;height:100%;width:0%;background:#2f81f7;transition:width .3s"></i></div>
       </div>
     `;
     document.body.appendChild(dlg);
@@ -277,6 +278,7 @@
     if ($('#h3v-cancelAI')) $('#h3v-cancelAI').onclick = function () {
       try { if (ABORT) ABORT.abort(); } catch (_) {}
       jobEnd();
+      pgSet(-1);
       status('err', '已取消本次 AI 请求');
     };
     if ($('#h3v-gen')) $('#h3v-gen').onclick = genSix;
@@ -632,6 +634,7 @@
     const btn = $('#h3v-runAll');
     btn.disabled = true;
     jobBegin('批量生成 ' + blocks.length + ' 条 · 并发 ' + conc);
+    pgSet(0);
     let next = 0, okN = 0, doneN = 0, coins = 0;
 
     async function worker() {
@@ -661,6 +664,7 @@
           await sleep(1200);
         }
         doneN++;
+        pgSet(100 * doneN / blocks.length);
         status('run', '进度 ' + doneN + '/' + blocks.length + '（成功 ' + okN + '）' + (coins ? ' · 已花 ' + coins + ' 币' : ''));
       }
     }
@@ -669,9 +673,18 @@
     for (let k = 0; k < Math.min(conc, blocks.length); k++) workers.push(worker());
     await Promise.all(workers);
 
+    pgSet(100);
     jobEnd();
     btn.disabled = false;
     status(okN ? 'ok' : 'err', '全部跑完：成功 ' + okN + ' / ' + blocks.length + ' 条' + (coins ? ' · 共 ' + coins + ' 币' : ''));
+  }
+
+  function pgSet(p) {
+    const wrap = $('#h3v-pgWrap'), bar = $('#h3v-pg');
+    if (!wrap || !bar) return;
+    if (p === null || p === undefined || p < 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    bar.style.width = Math.max(0, Math.min(100, p)) + '%';
   }
 
   const JOB = { t0: 0, label: '', timer: null };
@@ -1228,6 +1241,7 @@
     const btn = $('#h3v-sceneGen');
     btn.disabled = true;
     jobBegin('生成场景（' + list.length + ' 张 · 并发 ' + conc + '）');
+    pgSet(0);
     let done = 0, ok = 0, idx = 0;
 
     async function submitOne(s, tries) {
@@ -1254,6 +1268,7 @@
         const i = idx++;
         const s = list[i];
         jobLabel('场景 ' + (i + 1) + '/' + list.length + '：' + s.name);
+        pgSet(100 * (done / list.length));
         try {
           const j = await submitOne(s, 8);
           const file = await waitKrea2(j.taskId);
@@ -1280,6 +1295,7 @@
 
     jobEnd();
     btn.disabled = false;
+    pgSet(100);
     renderSceneListBox();
     status(ok ? 'ok' : 'err', '场景完成 ' + ok + '/' + list.length + '（画风：' + styleKey + '），已存进场景库');
   }
@@ -1594,13 +1610,16 @@
     const t0 = Date.now();
     try {
       status('run', '① 先估时长 / 排分镜…');
+      pgSet(10);
       const assets = buildAssetList();
       const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""\n\n' + assets.text, 2000);
       const plan = parsePlan(planTxt);
       status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
+      pgSet(20);
       let castText = '';
       try { castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200)).trim(); } catch (e) { LOG('cast fail', e); }
       status('run', '角色外观已锁定（' + (castText ? castText.split('\n').length : 0) + ' 行）；开始逐段写六段…');
+      pgSet(30);
 
       const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
       const blocks = [];
@@ -1618,6 +1637,7 @@
           + '<Subject N> 编号沿用全片编号；只拍这一段的事。'
           + (prevTail ? '\n\n上一段结尾状态（本段必须从这个画面/动作接上；不要重拍上一段已经发生的事，也不要重复它的台词）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
+        pgSet(30 + 70 * (i / plan.segs.length));
         let out = '';
         try { out = await callAI(SIX_SYS, user, 4000); } catch (e) { LOG('seg fail', i, e); }
         let b = extractPrompt(out);
@@ -1651,6 +1671,7 @@
       if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\[\/H3\]\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
       refreshBlockList();
+      pgSet(100);
       status('ok', '已生成 ' + blocks.length + ' 段 · 合计约 ' + plan.total + ' 秒 · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n下面「分段」里逐条选，或点「全部按顺序生成」');
     } catch (e) {
       status('err', '生成失败：' + (e && e.message ? e.message : e));
