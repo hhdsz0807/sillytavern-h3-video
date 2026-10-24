@@ -2596,6 +2596,23 @@
     '只输出翻译后的完整内容。',
   ].join('\n');
 
+  function showTransDialog(text) {
+    let d = document.getElementById('h3v-transDlg');
+    if (!d) {
+      d = document.createElement('dialog');
+      d.id = 'h3v-transDlg';
+      d.style.cssText = 'max-width:92vw;max-height:86vh;padding:0;border:1px solid #2a3240;border-radius:12px;background:#12161d;color:#e6ebf2;z-index:99999';
+      document.body.appendChild(d);
+    }
+    d.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #2a3240">'
+      + '<b style="font-size:14px">中文对照</b>'
+      + '<button id="h3v-transClose" style="background:#2a3240;color:#e6ebf2;border:0;border-radius:8px;padding:6px 12px;font-size:13px">关闭</button></div>'
+      + '<pre style="white-space:pre-wrap;font-size:13px;line-height:1.7;padding:12px 14px;margin:0;max-height:72vh;overflow:auto">' + esc(text) + '</pre>';
+    try { if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else { d.setAttribute('open', ''); } } catch (_) { d.setAttribute('open', ''); }
+    const btn = d.querySelector('#h3v-transClose');
+    if (btn) btn.onclick = function () { try { d.close(); } catch (_) { d.removeAttribute('open'); } };
+  }
+
   async function translateAll() {
     const src = ($('#h3v-prompt') || {}).value || '';
     if (!src.trim()) { status('err', '没有提示词可翻译'); return; }
@@ -2640,7 +2657,9 @@
     for (let k = 0; k < Math.min(conc, blocks.length); k++) ws.push(worker());
     await Promise.all(ws);
 
-    if (outEl) outEl.textContent = res.join('\n\n');
+    const joined = res.join('\n\n');
+    if (outEl) outEl.textContent = joined;
+    try { showTransDialog(joined); } catch (_) {}
     if (btn) btn.disabled = false;
     pgSet(100);
     jobEnd();
