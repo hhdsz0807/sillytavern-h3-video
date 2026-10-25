@@ -171,6 +171,7 @@
         <div class="row"><label>Agent 路径</label>
               <input type="text" id="h3v-agentPath" value="/v1/chat/completions" style="flex:1;max-width:220px">
           <button id="h3v-agentProbe" style="flex:none">探测接口</button>
+            <button id="h3v-agentProv" style="flex:none">建会话</button>
           <span class="hint" id="h3v-agentState">走手机 APK 转发，绕过浏览器 CORS</span>
         </div>
 
@@ -307,6 +308,7 @@
       $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/v1/chat/completions'; saveS(); };
     }
     if ($('#h3v-agentProbe')) $('#h3v-agentProbe').onclick = agentProbe;
+    if ($('#h3v-agentProv')) $('#h3v-agentProv').onclick = agentProvision;
     if ($('#h3v-presetSel')) {
       renderPresetSel();
       $('#h3v-presetSel').onchange = function () {
@@ -1766,6 +1768,25 @@
     const txt = pickAgentText(j);
     if (txt) return txt;
     throw new Error('Agent 返回里没找到文本：' + String(r.body || '').slice(0, 160));
+  }
+
+  async function agentProvision() {
+    const cfg = agentCfg();
+    if (!cfg.raw) { status('err', '先填 Agent 地址（http://127.0.0.1:3099）'); return; }
+    status('run', '正在建 5 个会话，每个约 30–60 秒，请勿关闭页面…');
+    try {
+      const r = await agentHttp(cfg.origin + '/v1/h3/provision', '', 'GET');
+      if (!r || !r.ok) throw new Error('状态 ' + ((r && r.status) || '?'));
+      const j = JSON.parse(r.body || '{}');
+      const map = j.mapping || {};
+      const keys = Object.keys(map);
+      const lines = keys.map(function (k) { return k + ' → ' + map[k]; }).join('\n');
+      status(keys.length ? 'ok' : 'err', '会话就绪：' + keys.length + ' 个');
+      alert('会话已就绪（' + keys.length + ' 个）\n\n' + (lines || '(空，稍后再点一次)'));
+    } catch (e) {
+      status('err', '建会话失败：' + e.message);
+      alert('建会话失败：' + e.message);
+    }
   }
 
   async function agentProbe() {
