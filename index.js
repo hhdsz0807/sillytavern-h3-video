@@ -1696,18 +1696,35 @@
     return { raw: raw, origin: raw, token: '', path: path, url: raw + path };
   }
 
-  async function agentHttp(url, bodyStr) {
+  async function agentHttp(url, bodyStr, method) {
+    const verb = (method || 'POST').toUpperCase();
     const headers = { 'Content-Type': 'application/json' };
     if (window.__h3Purpose) headers['X-DSH-Session'] = window.__h3Purpose;
-    const r = await withTimeout(fetch(api('/api/fetch'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: url, method: 'POST', headers: headers, body: bodyStr }),
-    }), 900000, 'Agent ');
-    const txt = await r.text();
-    let j = {};
-    try { j = JSON.parse(txt); } catch (_) { throw new Error('转发返回非 JSON：' + txt.slice(0, 120)); }
-    return j;
+
+    // ① 浏览器直连（3099 带 CORS，最省事、不依赖 H3 APK）
+    try {
+      const r = await withTimeout(fetch(url, {
+        method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
+      }), 900000, 'Agent ');
+      const txt = await r.text();
+      let j = {};
+      try { j = JSON.parse(txt); } catch (_) { j = { ok: r.ok, status: r.status, body: txt }; }
+      if (j.ok === undefined) j.ok = r.ok;
+      if (j.status === undefined) j.status = r.status;
+      if (j.body === undefined) j.body = txt;
+      return j;
+    } catch (e1) {
+      // ② 退回 H3 APK 转发（H3 没开时会失败，正常）
+      const r = await withTimeout(fetch(api('/api/fetch'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url, method: verb, headers: headers, body: bodyStr }),
+      }), 900000, 'Agent 转发 ');
+      const txt = await r.text();
+      let j = {};
+      try { j = JSON.parse(txt); } catch (_) { throw new Error('转发返回非 JSON：' + txt.slice(0, 120)); }
+      return j;
+    }
   }
 
   function pickAgentText(json) {
@@ -1757,7 +1774,7 @@
     const tryBase = async function (base) {
       const u = base + '/v1/models';
       status('run', '探测 ' + u + ' …');
-      const r = await jpost('/api/fetch', { url: u, method: 'GET', headers: {}, body: '' });
+      const r = await agentHttp(u, '', 'GET');
       if (!r || !r.ok) throw new Error('状态 ' + ((r && r.status) || '?') + ' ' + String((r && r.body) || '').slice(0, 80));
       return r;
     };
