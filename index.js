@@ -3727,6 +3727,7 @@ window.__h3Purpose = 'artplan';
 artPlan = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""\n\n已提取的角色设定：\n' + (castText || '(无)') + '\n\n请在此基础上给出造型规划：每个角色在全片中的服装与状态变化顺序，以及需要几张造型参考图。', 900)).trim();
 } catch (e) { LOG('artplan fail', e); }
 window.__h3Purpose = 'plan';
+      const allBeats = plan.segs.map(function (s) { return s.i + '. ' + (s.beat || ''); }).join('\n');
 const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' + castText) : '') + (artPlan ? ('\n\n【造型规划】\n' + artPlan) : '');
       const blocksArr = new Array(plan.segs.length).fill(null);
       let LAST_SEG_ERR = '';
