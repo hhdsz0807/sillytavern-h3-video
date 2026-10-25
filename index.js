@@ -1752,26 +1752,41 @@
   }
 
   async function agentProbe() {
-    const cfg = agentCfg();
-    if (!cfg.raw) { status('err', '先填 Agent 地址，例如 http://127.0.0.1:3099'); return; }
-    const url = cfg.origin + '/v1/models';
-    status('run', '探测 ' + url + ' …');
-    try {
-      const r = await jpost('/api/fetch', { url: url, method: 'GET', headers: {}, body: '' });
+    const FALLBACK = 'http://127.0.0.1:3099';
+    let cfg = agentCfg();
+    const tryBase = async function (base) {
+      const u = base + '/v1/models';
+      status('run', '探测 ' + u + ' …');
+      const r = await jpost('/api/fetch', { url: u, method: 'GET', headers: {}, body: '' });
       if (!r || !r.ok) throw new Error('状态 ' + ((r && r.status) || '?') + ' ' + String((r && r.body) || '').slice(0, 80));
+      return r;
+    };
+    try {
+      let r = null;
+      try {
+        r = await tryBase(cfg.origin);
+      } catch (e1) {
+        if (cfg.origin === FALLBACK) throw e1;
+        status('run', '当前地址不通，改试 3099 …');
+        r = await tryBase(FALLBACK);
+        cfg = { raw: FALLBACK, origin: FALLBACK, path: '/v1/chat/completions', url: FALLBACK + '/v1/chat/completions' };
+        const elU = $('#h3v-agentUrl');
+        if (elU) elU.value = FALLBACK;
+      }
       let names = '';
       try { names = ((JSON.parse(r.body) || {}).data || []).map(function (x) { return x.id; }).join(', '); } catch (_) {}
       S.agentProto = 'openai';
       S.agentPath = '/v1/chat/completions';
       S.agentUrl = cfg.origin;
       saveS();
-      const el = $('#h3v-agentPath'); if (el) el.value = '/v1/chat/completions';
-      const msg = '✅ 已连上\n' + cfg.origin + '\n模型：' + (names || 'dsh-headless') + '\n路径已设为 /v1/chat/completions';
+      const el = $('#h3v-agentPath');
+      if (el) el.value = '/v1/chat/completions';
+      const msg = '✅ 已连上\n' + cfg.origin + '\n模型：' + (names || 'dsh-headless');
       status('ok', msg.replace(/\n/g, ' · '));
       alert(msg);
     } catch (e) {
       status('err', '探测失败：' + e.message);
-      alert('探测失败：' + e.message + '\n\n检查：DSHA 里 3099 是否在跑（浏览器开 ' + url + '）');
+      alert('探测失败：' + e.message + '\n\n先在手机浏览器打开 http://127.0.0.1:3099/v1/models 确认桥在跑');
     }
   }
 
