@@ -1775,6 +1775,7 @@
     if (!cfg.raw) { status('err', '先填 Agent 地址（http://127.0.0.1:3099）'); return; }
     status('run', '正在建 5 个会话，每个约 30–60 秒，请勿关闭页面…');
     try {
+      try { await agentHttp(cfg.origin + '/v1/h3/reset', '', 'GET'); } catch (_) {}
       const r = await agentHttp(cfg.origin + '/v1/h3/provision', '', 'GET');
       if (!r || !r.ok) throw new Error('状态 ' + ((r && r.status) || '?'));
       const j = JSON.parse(r.body || '{}');
