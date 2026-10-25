@@ -124,6 +124,8 @@
             <option value="real">写实实拍（摄影）</option>
             <option value="cinematic">电影感（写实+调色）</option>
             <option value="mixed">混合（角色2D+场景写实）</option>
+            <option value="hybrid25d">2.5D 混合（头2D+身体3D）</option>
+            <option value="pure25d">纯 2.5D（全角色体积感）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
           <label style="min-width:auto">并发</label>
@@ -242,6 +244,8 @@
             <option value="real">写实实拍</option>
             <option value="cinematic">电影感</option>
             <option value="mixed">混合（角色2D+场景写实）</option>
+            <option value="hybrid25d">2.5D 混合（头2D+身体3D）</option>
+            <option value="pure25d">纯 2.5D（全角色体积感）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
           <label style="min-width:auto"><input type="checkbox" id="h3v-videoCloud"> 云端直连</label>
@@ -2602,6 +2606,8 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     real: 'Visual style: photorealistic live-action footage, natural light, real materials, 35mm lens.',
     cinematic: 'Visual style: cinematic live-action, photorealistic, moody color grading, shallow depth of field.',
     watercolor: 'Visual style: watercolor illustration animation, soft washes, paper texture, hand-painted look, no photoreal detail.',
+    hybrid25d: 'Visual style: 2.5D anime hybrid — cel-shaded flat base with clean lineart plus volumetric shading, soft rim light and subtle specular highlights; the character head and hair are flat 2D anime cel-shading with crisp lineart and flat fills, while the body from the neck down is 3D CG with volumetric lighting, soft specular highlights and subtle subsurface skin shading, both parts sharing identical proportions and pose so the figure reads as one; no photorealistic texture, no live-action footage.',
+    pure25d: 'Visual style: 2.5D anime — cel-shaded flat base colors with clean lineart plus volumetric shading, soft rim light and subtle specular highlights across the whole figure and background, consistent 2.5D render in every shot; no photorealistic texture, no live-action footage.',
     mixed: 'Visual style: mixed media — ALL characters are 2D anime (cel-shaded, clean lineart, flat color); ALL environments and props are photorealistic live-action (real materials, natural light, photographic detail). Keep the two treatments clearly separated: anime figures composited into a photographic world, never blending their rendering.',
   };
   const LIVE_WORDS = [
@@ -2622,7 +2628,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     // 1) 先把旧的风格行整行删掉（否则替换规则会把风格行自己也改坏）
     s = s.replace(/^[ \t]*Visual style:.*$/gim, '');
     // 2) 再替换正文里的实拍词
-    if (key === 'anime' || key === 'watercolor') {  // mixed 保留 photorealistic 词
+    if (key === 'anime' || key === 'watercolor' || key === 'hybrid25d') {
       LIVE_WORDS.forEach(function (pair) { s = s.replace(pair[0], pair[1]); });
       s = s.replace(/\b(\w+)\s+\1\b/gi, '$1');
       s = s.replace(/[ \t]{2,}/g, ' ');
