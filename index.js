@@ -81,6 +81,7 @@
 
         <div class="row"><label>角色库</label>
           <button id="h3v-charUp" style="flex:none">+ 上传角色图</button>
+          <button id="h3v-outfit" style="flex:none">按正文换装</button>
           <span class="hint" id="h3v-charHint">每张填个中文名；分段提示词只会从这些名字里选</span>
         </div>
         <details id="h3v-charDetails" style="margin:2px 0 10px"><summary id="h3v-charSum" style="cursor:pointer;color:#8b98ab;font-size:13px">角色库（点开）</summary><div id="h3v-charList"></div></details>
@@ -456,6 +457,7 @@
     if ($('#h3v-loadapk2')) $('#h3v-loadapk2').onclick = loadVideosFromApk;
     if ($('#h3v-merge2')) $('#h3v-merge2').onclick = function () { renderOut(); mergeAll(); };
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
+    if ($('#h3v-outfit')) $('#h3v-outfit').onclick = outfitGen;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
     renderCharList();
     renderSceneListBox();
@@ -3387,6 +3389,71 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       if (j && !j.error && j.name) return j;
       return { name: localName, local: true };
     });
+  }
+
+  const OUTFIT_SYS = `你是服装变更判定器。读正文，判断角色现在的服装是否和"已入库造型"不同。
+输出每行三个字段，用 | 分隔：角色名|服装中文名|英文服装外观描述（只描述衣服、鞋袜、配饰；脸/发型/体型不要写）
+只输出确实换过的；一个都没换就只输出 NONE。不要解释，不要编号。`;
+
+  async function outfitGen() {
+    const text = (CURTEXT || lastMessageText() || '').trim();
+    if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
+    if (!CHARLIB.length) { status('err', '角色库是空的，先上传一张四视图'); return; }
+    jobBegin('按正文换装');
+    pgSet(5);
+    try {
+      window.__h3Purpose = 'art';
+      const known = CHARLIB.map(function (c) { return c.name; }).join('、');
+      status('run', '① 判断服装有没有变化…');
+      const out = await callAI(OUTFIT_SYS, '正文：\n"""\n' + text + '\n"""\n\n已入库造型：' + known, 800);
+      const lines = String(out || '').split('\n').map(function (s) { return s.trim(); })
+        .filter(function (s) { return s && s.indexOf('|') > 0 && !/^NONE$/i.test(s); });
+      if (!lines.length) { status('ok', '正文里没检测到服装变化（输出 NONE）'); pgSet(100); return; }
+
+      for (let k = 0; k < lines.length; k++) {
+        const parts = lines[k].split('|').map(function (x) { return x.trim(); });
+        const who = parts[0], oname = parts[1] || '换装', desc = parts[2] || parts[1] || '';
+        const target = who + '-' + oname;
+        if (CHARLIB.some(function (c) { return c.name === target; })) {
+          status('run', '已有「' + target + '」，跳过'); continue;
+        }
+        const ref = CHARLIB.filter(function (c) { return c.name.indexOf(who) === 0; })[0];
+        if (!ref) { status('err', '角色库里没有「' + who + '」的四视图，先上传'); continue; }
+
+        status('run', '② 生成「' + target + '」四视图…');
+        const prompt = 'Keep the same character, same face, same hairstyle, same four-view layout (front half-body, left full body, right full body, back full body), same plain grey background and same framing. Only change the outfit and footwear to: ' + desc + ' Do not add text, panels or extra characters.';
+        const j = await jpost('/api/qwen21/run', { image: ref.file, prompt: prompt, mp: 1.5, aspect: '1:1 (Square)' });
+        if (!j.ok) throw new Error(j.error || '提交失败');
+        let file = '';
+        for (let t = 0; t < 100; t++) {
+          await new Promise(function (r) { setTimeout(r, 5000); });
+          const h = await withTimeout(fetch(api('/api/qwen21/history')), 20000, '换装查询').then(function (r) { return r.json(); });
+          const js = (h && h.jobs) || [];
+          const job = js.filter(function (x) { return x.taskId === j.taskId; })[0] || js[0];
+          if (!job) continue;
+          if (job.state === 'error') throw new Error(job.error || '生成失败');
+          if (job.state === 'done') {
+            const u = (job.files || [])[0] || '';
+            const m = u.match(/filename=([^&]+)/);
+            file = m ? decodeURIComponent(m[1]) : '';
+            break;
+          }
+          pgSet(10 + Math.min(80, t * 2));
+        }
+        if (!file) throw new Error('等待出图超时');
+        CHARLIB.push({ file: file, name: target });
+        saveChars();
+        renderCharList();
+        status('ok', '已加入角色库：' + target);
+      }
+      pgSet(100);
+      status('ok', '换装完成，角色库已更新');
+    } catch (e) {
+      status('err', '换装失败：' + (e && e.message ? e.message : e));
+    } finally {
+      jobEnd();
+      window.__h3Purpose = 'plan';
+    }
   }
 
   function uploadChar() {
