@@ -127,6 +127,7 @@
             <option value="hybrid25d">2.5D 混合（头2D+身体3D）</option>
             <option value="pure25d">纯 2.5D（全角色体积感）</option>
             <option value="face2d">混合（脸2D+身体写实真人）</option>
+            <option value="custom">自定义画风（自己写风格句）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
           <label style="min-width:auto">并发</label>
@@ -248,8 +249,10 @@
             <option value="hybrid25d">2.5D 混合（头2D+身体3D）</option>
             <option value="pure25d">纯 2.5D（全角色体积感）</option>
             <option value="face2d">混合（脸2D+身体写实真人）</option>
+            <option value="custom">自定义画风（自己写风格句）</option>
             <option value="watercolor">水彩/绘本</option>
           </select>
+          <input type="text" id="h3v-customStyle" placeholder="自定义风格句（英文更稳），例：2D anime, heavy ink shading, high contrast'"'"'" style="flex:1;min-width:220px">
           <label style="min-width:auto"><input type="checkbox" id="h3v-videoCloud"> 云端直连</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-chain"> 接尾帧</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-del" ${S.del ? 'checked' : ''}> 跑完删云端</label>
@@ -348,6 +351,10 @@
     }
     if ($('#h3v-apiSave')) $('#h3v-apiSave').onclick = saveProfile;
     if ($('#h3v-apiDel')) $('#h3v-apiDel').onclick = delProfile;
+    if ($('#h3v-customStyle')) {
+      $('#h3v-customStyle').value = S.customStyle || '';
+      $('#h3v-customStyle').oninput = function () { S.customStyle = $('#h3v-customStyle').value.trim(); saveS(); };
+    }
     if ($('#h3v-videoStyle')) {
       $('#h3v-videoStyle').value = S.videoStyle || 'anime';
       $('#h3v-videoStyle').onchange = function () { S.videoStyle = $('#h3v-videoStyle').value; saveS(); };
@@ -2626,7 +2633,10 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   function applyVideoStyle(block) {
     let s = String(block || '');
     const key = S.videoStyle || 'anime';
-    const line = VIDEO_STYLE_LINE[key] || VIDEO_STYLE_LINE.anime;
+    const custom = String(S.customStyle || '').trim();
+    const line = (key === 'custom')
+      ? ('Visual style: ' + (custom || '2D anime, cel-shaded flat colors, clean lineart, no photorealistic texture'))
+      : (VIDEO_STYLE_LINE[key] || VIDEO_STYLE_LINE.anime);
 
     // 1) 先把旧的风格行整行删掉（否则替换规则会把风格行自己也改坏）
     s = s.replace(/^[ \t]*Visual style:.*$/gim, '');
