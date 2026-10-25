@@ -1711,7 +1711,7 @@
   async function agentHttp(url, bodyStr, pinOverride) {
     const cfg = agentCfg();
     const headers = { 'Content-Type': 'application/json' };
-    const pin = (pinOverride === undefined) ? cfg.token : pinOverride;
+    if (window.__h3Purpose) headers['X-DSH-Session'] = window.__h3Purpose;
     if (pin) {
       headers['Authorization'] = 'Bearer ' + pin;
       headers['X-Token'] = pin;
@@ -3090,6 +3090,7 @@
   }
 
   async function translateAll() {
+    window.__h3Purpose = 'trans';
     const src = ($('#h3v-prompt') || {}).value || '';
     if (!src.trim()) { status('err', '没有提示词可翻译'); return; }
     const blocks = parseBlocks(src);
@@ -3144,6 +3145,7 @@
 
 
   async function qcFix(auto) {
+    window.__h3Purpose = 'fix';
     const box = $('#h3v-prompt');
     if (!box) return;
     const src = box.value.trim();
@@ -3231,6 +3233,7 @@
 
 
   async function genSix() {
+    window.__h3Purpose = 'gen';
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
