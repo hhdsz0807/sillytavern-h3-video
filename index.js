@@ -2706,14 +2706,30 @@
       const name = el.getAttribute('data-file');
       if (!name || el.dataset.done) continue;
       el.dataset.done = '1';
+      el.style.background = '#1b2230';
       try {
         const blob = await IDB.get(name);
         if (blob) {
           const u = URL.createObjectURL(blob);
           el.src = u;
-          el.onload = function () { setTimeout(function () { URL.revokeObjectURL(u); }, 8000); };
+          el.onload = function () { setTimeout(function () { URL.revokeObjectURL(u); }, 15000); };
+          continue;
         }
       } catch (_) {}
+      // 本地没有：试试 APK（H3 开着时可用）
+      try {
+        const r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(name) + '&t=' + Date.now()));
+        if (r.ok) {
+          const b = await r.blob();
+          try { await IDB.put(name, b, 'image'); } catch (_) {}
+          const u = URL.createObjectURL(b);
+          el.src = u;
+          el.onload = function () { setTimeout(function () { URL.revokeObjectURL(u); }, 15000); };
+          continue;
+        }
+      } catch (_) {}
+      el.alt = '无预览';
+      el.title = '本地没有这张图（或 H3 没开）';
     }
   }
 
