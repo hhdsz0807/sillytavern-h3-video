@@ -1858,6 +1858,29 @@
     const cfg = agentCfg();
     if (!cfg.raw) { status('err', '先在「Agent 地址」粘贴完整地址（含 ?token=）'); return; }
 
+    // ① 先看这是不是一个 OpenAI 兼容端点（我们自己桥就是）
+    {
+      const url = cfg.origin + '/v1/models';
+      try {
+        const r = await jpost('/api/fetch', { url: url, method: 'GET', headers: {}, body: '' });
+        if (r && r.ok) {
+          S.agentProto = 'openai';
+          S.agentPath = '/v1/chat/completions';
+          S.agentUrl = cfg.origin;
+          saveS();
+          const elPath = $('#h3v-agentPath');
+          if (elPath) elPath.value = '/v1/chat/completions';
+          let names = '';
+          try {
+            const j = JSON.parse(r.body || '{}');
+            names = (j.data || []).map(function (x) { return x.id; }).join(', ');
+          } catch (_) {}
+          status('ok', '✅ 找到 OpenAI 兼容端点：' + url + '\n模型：' + (names || '(未列出)') + '\n已把 Agent 路径设为 /v1/chat/completions，可以直接生成/修缮/翻译。');
+          return;
+        }
+      } catch (e) { LOG('v1/models probe err', e); }
+    }
+
     // 候选端口：你粘的 + DSH 常见的 ACP 端口
     const portList = [];
     const m = cfg.origin.match(/:(\d+)$/);
