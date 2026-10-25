@@ -1719,7 +1719,15 @@
       if (url.indexOf('token=') < 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(pin);
     }
     if (S.agentCookie) headers['Cookie'] = S.agentCookie;
-    return await jpost('/api/fetch', { url: url, method: 'POST', headers: headers, body: bodyStr });
+    const r = await withTimeout(fetch(api('/api/fetch'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url, method: 'POST', headers: headers, body: bodyStr }),
+    }), 900000, 'Agent ');
+    const txt = await r.text();
+    let j = {};
+    try { j = JSON.parse(txt); } catch (_) { throw new Error('转发返回非 JSON：' + txt.slice(0, 120)); }
+    return j;
   }
 
   async function agentLogin() {
