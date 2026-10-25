@@ -3795,8 +3795,12 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       for (let k = 0; k < Math.min(GENCONC, plan.segs.length); k++) workers.push(genWorker());
       await Promise.all(workers);
       const blocks = blocksArr.filter(Boolean);
-      if (!blocks.length) { try { $('#h3v-prompt').value = '【上一段模型原始返回】
-' + (LAST_SEG_OUT || '(空)'); } catch (_) {} throw new Error('一段都没生成出来' + (LAST_SEG_ERR ? ('：' + LAST_SEG_ERR) : '') + '（原始返回已写进上面的六段提示词框）'); }
+      if (!blocks.length) {
+        try {
+          $('#h3v-prompt').value = '【上一段模型原始返回】\n' + (LAST_SEG_OUT || '(空)');
+        } catch (_) {}
+        throw new Error('一段都没生成出来' + (LAST_SEG_ERR ? ('：' + LAST_SEG_ERR) : '') + '（原始返回已写进上面的六段提示词框）');
+      }
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
       if (S.autoQc) { try { await qcFix(true); } catch (_) {} }
       refreshBlockList();
