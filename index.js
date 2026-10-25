@@ -3729,6 +3729,8 @@ artPlan = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""\n\n�
 window.__h3Purpose = 'plan';
 const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' + castText) : '') + (artPlan ? ('\n\n【造型规划】\n' + artPlan) : '');
       const blocksArr = new Array(plan.segs.length).fill(null);
+      let LAST_SEG_ERR = '';
+      let LAST_SEG_OUT = '';
       const GENCONC = Math.max(1, Number(S.genConc || 3));
       let nextI = 0, doneI = 0;
 
@@ -3749,9 +3751,10 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           + (prevTail ? '\n\n上一段结尾状态（能接上就接上；不要重拍上一段已经发生的事）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
         let out = '';
-        try { out = await callAI(SIX_SYS, user, 3000); } catch (e) { LOG('seg fail', i, e); }
+        try { out = await callAI(SIX_SYS, user, 3000); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
+        LAST_SEG_OUT = String(out || '').slice(0, 400);
         if (b && !/<Picture\s*\d/i.test(b)) {
           try {
             const retryUser = user + '\n\n注意：上一版一个 Picture 编号都没写。本次必须在 subject_definitions 里给角色/场景标注 <Picture N>。';
@@ -3792,7 +3795,8 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       for (let k = 0; k < Math.min(GENCONC, plan.segs.length); k++) workers.push(genWorker());
       await Promise.all(workers);
       const blocks = blocksArr.filter(Boolean);
-      if (!blocks.length) throw new Error('一段都没生成出来，换个模型或改用自定义 API');
+      if (!blocks.length) { try { $('#h3v-prompt').value = '【上一段模型原始返回】
+' + (LAST_SEG_OUT || '(空)'); } catch (_) {} throw new Error('一段都没生成出来' + (LAST_SEG_ERR ? ('：' + LAST_SEG_ERR) : '') + '（原始返回已写进上面的六段提示词框）'); }
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
       if (S.autoQc) { try { await qcFix(true); } catch (_) {} }
       refreshBlockList();
