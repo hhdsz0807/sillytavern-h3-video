@@ -166,11 +166,10 @@
         </div>
         <div id="h3v-apiBox" style="display:none">
                                 <div class="row"><label>Agent 地址</label>
-          <input type="text" id="h3v-agentUrl" placeholder="http://127.0.0.1:35869/?token=..." style="flex:1">
-          <input type="password" id="h3v-agentPin" placeholder="PIN/Token" style="max-width:140px">
+              <input type="text" id="h3v-agentUrl" placeholder="http://127.0.0.1:3099" style="flex:1">
         </div>
         <div class="row"><label>Agent 路径</label>
-          <input type="text" id="h3v-agentPath" value="/api/chat" style="flex:1;max-width:220px">
+              <input type="text" id="h3v-agentPath" value="/v1/chat/completions" style="flex:1;max-width:220px">
           <button id="h3v-agentProbe" style="flex:none">探测接口</button>
           <span class="hint" id="h3v-agentState">走手机 APK 转发，绕过浏览器 CORS</span>
         </div>
@@ -302,12 +301,10 @@
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
     if ($('#h3v-agentUrl')) {
-      $('#h3v-agentUrl').value = S.agentUrl || 'http://127.0.0.1:35869';
-      $('#h3v-agentPath').value = S.agentPath || '/api/chat';
-      $('#h3v-agentPin').value = S.agentPin || '';
+      $('#h3v-agentUrl').value = S.agentUrl || 'http://127.0.0.1:3099';
+      $('#h3v-agentPath').value = S.agentPath || '/v1/chat/completions';
       $('#h3v-agentUrl').oninput = function () { S.agentUrl = $('#h3v-agentUrl').value.trim(); saveS(); };
-      $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/api/chat'; saveS(); };
-      $('#h3v-agentPin').oninput = function () { S.agentPin = $('#h3v-agentPin').value.trim(); saveS(); };
+      $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/v1/chat/completions'; saveS(); };
     }
     if ($('#h3v-agentProbe')) $('#h3v-agentProbe').onclick = agentProbe;
     if ($('#h3v-presetSel')) {
@@ -1693,32 +1690,15 @@
   }
   /* ---------- 本机 Agent（DSH Pocket） ---------- */
   function agentCfg() {
-    // 直接粘贴整条地址：http://host:端口/?token=xxx（端口和 token 都会变）
-    const elUrl = $('#h3v-agentUrl');
-    const elPath = $('#h3v-agentPath');
-    const elPin = $('#h3v-agentPin');
-    const raw = String((elUrl && elUrl.value) || S.agentUrl || '').trim();
-    const tokenM = raw.match(/[?&]token=([^&#]+)/i);
-    const token = tokenM ? decodeURIComponent(tokenM[1]) : String((elPin && elPin.value) || S.agentPin || '');
-    let origin = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
-    if (!/^https?:\/\//i.test(origin)) origin = 'http://' + origin.replace(/^:+/, '');
-    const path = String((elPath && elPath.value) || S.agentPath || '/api/chat').trim() || '/api/chat';
-    let url = origin + path;
-    if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
-    return { raw: raw, origin: origin, token: token, path: path, url: url };
+    let raw = String((($('#h3v-agentUrl') || {}).value) || S.agentUrl || '').trim();
+    raw = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    const path = String((($('#h3v-agentPath') || {}).value) || S.agentPath || '/v1/chat/completions').trim() || '/v1/chat/completions';
+    return { raw: raw, origin: raw, token: '', path: path, url: raw + path };
   }
 
-  async function agentHttp(url, bodyStr, pinOverride) {
-    const cfg = agentCfg();
+  async function agentHttp(url, bodyStr) {
     const headers = { 'Content-Type': 'application/json' };
     if (window.__h3Purpose) headers['X-DSH-Session'] = window.__h3Purpose;
-    if (pin) {
-      headers['Authorization'] = 'Bearer ' + pin;
-      headers['X-Token'] = pin;
-      headers['X-Api-Key'] = pin;
-      if (url.indexOf('token=') < 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(pin);
-    }
-    if (S.agentCookie) headers['Cookie'] = S.agentCookie;
     const r = await withTimeout(fetch(api('/api/fetch'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1728,30 +1708,6 @@
     let j = {};
     try { j = JSON.parse(txt); } catch (_) { throw new Error('转发返回非 JSON：' + txt.slice(0, 120)); }
     return j;
-  }
-
-  async function agentLogin() {
-    const cfg = agentCfg();
-    if (!cfg.pin) return null;
-    const cands = ['/api/auth', '/api/login', '/api/pin', '/api/pocket/auth', '/api/session', '/auth', '/login'];
-    for (let k = 0; k < cands.length; k++) {
-      const url = cfg.base + cands[k];
-      let r = null;
-      try {
-        r = await agentHttp(url, JSON.stringify({ pin: cfg.pin, password: cfg.pin, code: cfg.pin, token: cfg.pin }), '');
-      } catch (_) { continue; }
-      if (!r || !r.ok) continue;
-      let j = null;
-      try { j = JSON.parse(r.body); } catch (_) {}
-      const tok = j && (j.token || j.accessToken || j.access_token || (j.data && (j.data.token || j.data.accessToken)));
-      const hdrs = r.headers || {};
-      const ckRaw = hdrs['Set-Cookie'] || hdrs['set-cookie'] || '';
-      const ck = ckRaw ? String(ckRaw).split(' | ')[0].split(';')[0] : '';
-      if (tok) S.agentToken = tok;
-      if (ck) S.agentCookie = ck;
-      if (tok || ck) { saveS(); return { path: cands[k], token: !!tok, cookie: !!ck }; }
-    }
-    return null;
   }
 
   function pickAgentText(json) {
@@ -1773,69 +1729,7 @@
     return '';
   }
 
-  /* ---------- ACP（DSH 给程序用的接口）：/acp JSON-RPC + SSE ---------- */
-  function acpUrl() {
-    const cfg = agentCfg();
-    return cfg.origin + '/acp';
-  }
-
-  async function acpPost(payload) {
-    const cfg = agentCfg();
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
-    if (cfg.token) { headers['Authorization'] = 'Bearer ' + cfg.token; }
-    const r = await jpost('/api/fetch', {
-      url: acpUrl(), method: 'POST', headers: headers, body: JSON.stringify(payload),
-    });
-    return r;
-  }
-
-  function acpParseText(body) {
-    // SSE: data: {...} 逐行；或纯 JSON
-    const out = [];
-    const lines = String(body || '').split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      let s = lines[i].trim();
-      if (!s) continue;
-      if (s.indexOf('data:') === 0) s = s.slice(5).trim();
-      if (!s || s === '[DONE]') continue;
-      let j = null;
-      try { j = JSON.parse(s); } catch (_) { continue; }
-      const collect = function (o) {
-        if (!o || typeof o !== 'object') return;
-        if (o.sessionUpdate === 'agent_message_chunk' && o.content && typeof o.content.text === 'string') out.push(o.content.text);
-        if (o.result && o.result.stopReason) { /* done */ }
-        if (o.params && o.params.update) collect(o.params.update);
-        if (o.result && o.result.message && typeof o.result.message === 'string') out.push(o.result.message);
-      };
-      collect(j);
-    }
-    return out.join('');
-  }
-
-  async function acpAsk(sys, user) {
-    const init = await acpPost({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
-    if (!init || !init.ok) throw new Error('ACP initialize 失败：' + ((init && (init.error || init.status)) || '无响应'));
-
-    const sn = await acpPost({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/root', mcpServers: [] } });
-    if (!sn || !sn.ok) throw new Error('ACP session/new 失败：' + ((sn && (sn.error || sn.status)) || '无响应'));
-    let sid = '';
-    try {
-      const body = String(sn.body || '');
-      const m = body.match(/"sessionId"\s*:\s*"([^"]+)"/);
-      if (m) sid = m[1];
-    } catch (_) {}
-    if (!sid) throw new Error('ACP 没给 sessionId：' + String(sn.body || '').slice(0, 120));
-
-    const pr = await acpPost({
-      jsonrpc: '2.0', id: 3, method: 'session/prompt',
-      params: { sessionId: sid, prompt: [{ type: 'text', text: sys + '\n\n' + user }] },
-    });
-    if (!pr || !pr.ok) throw new Error('ACP session/prompt 失败：' + ((pr && (pr.error || pr.status)) || '无响应'));
-    const txt = acpParseText(pr.body);
-    if (!txt) throw new Error('ACP 返回无正文：' + String(pr.body || '').slice(0, 160));
-    return txt;
-  }
-
+  /* ---------- 本机 Agent（3099 OpenAI 兼容） ---------- */
   async function agentGenerate(sys, user, len) {
     const cfg = agentCfg();
     const body = {
@@ -1845,12 +1739,7 @@
       stream: false,
     };
     jobLabel('调本机 Agent');
-    let r = await agentHttp(cfg.url, JSON.stringify(body));
-    if (r && r.status === 401) {
-      jobLabel('Agent 需要登录，先换 token');
-      const ok = await agentLogin();
-      if (ok) r = await agentHttp(cfg.url, JSON.stringify(body));
-    }
+    const r = await agentHttp(cfg.url, JSON.stringify(body));
     if (!r || !r.ok) {
       const detail = r && (r.error || (r.status + ' ' + String(r.body || '').slice(0, 140)));
       throw new Error('Agent 调用失败：' + detail);
@@ -1864,66 +1753,26 @@
 
   async function agentProbe() {
     const cfg = agentCfg();
-    if (!cfg.raw) { status('err', '先在「Agent 地址」粘贴完整地址（含 ?token=）'); return; }
-
-    // ① 先看这是不是一个 OpenAI 兼容端点（我们自己桥就是）
-    {
-      const url = cfg.origin + '/v1/models';
-      try {
-        const r = await jpost('/api/fetch', { url: url, method: 'GET', headers: {}, body: '' });
-        if (r && r.ok) {
-          S.agentProto = 'openai';
-          S.agentPath = '/v1/chat/completions';
-          S.agentUrl = cfg.origin;
-          saveS();
-          const elPath = $('#h3v-agentPath');
-          if (elPath) elPath.value = '/v1/chat/completions';
-          let names = '';
-          try {
-            const j = JSON.parse(r.body || '{}');
-            names = (j.data || []).map(function (x) { return x.id; }).join(', ');
-          } catch (_) {}
-          status('ok', '✅ 找到 OpenAI 兼容端点：' + url + '\n模型：' + (names || '(未列出)') + '\n已把 Agent 路径设为 /v1/chat/completions，可以直接生成/修缮/翻译。');
-          return;
-        }
-      } catch (e) { LOG('v1/models probe err', e); }
+    if (!cfg.raw) { status('err', '先填 Agent 地址，例如 http://127.0.0.1:3099'); return; }
+    const url = cfg.origin + '/v1/models';
+    status('run', '探测 ' + url + ' …');
+    try {
+      const r = await jpost('/api/fetch', { url: url, method: 'GET', headers: {}, body: '' });
+      if (!r || !r.ok) throw new Error('状态 ' + ((r && r.status) || '?') + ' ' + String((r && r.body) || '').slice(0, 80));
+      let names = '';
+      try { names = ((JSON.parse(r.body) || {}).data || []).map(function (x) { return x.id; }).join(', '); } catch (_) {}
+      S.agentProto = 'openai';
+      S.agentPath = '/v1/chat/completions';
+      S.agentUrl = cfg.origin;
+      saveS();
+      const el = $('#h3v-agentPath'); if (el) el.value = '/v1/chat/completions';
+      const msg = '✅ 已连上\n' + cfg.origin + '\n模型：' + (names || 'dsh-headless') + '\n路径已设为 /v1/chat/completions';
+      status('ok', msg.replace(/\n/g, ' · '));
+      alert(msg);
+    } catch (e) {
+      status('err', '探测失败：' + e.message);
+      alert('探测失败：' + e.message + '\n\n检查：DSHA 里 3099 是否在跑（浏览器开 ' + url + '）');
     }
-
-    // 候选端口：你粘的 + DSH 常见的 ACP 端口
-    const portList = [];
-    const m = cfg.origin.match(/:(\d+)$/);
-    if (m) portList.push(m[1]);
-    ['7331', '7330', '3090', '8080', '8000', '3000'].forEach(function (x) { if (portList.indexOf(x) < 0) portList.push(x); });
-    const hostPart = cfg.origin.replace(/:\d+$/, '');
-
-    const log = ['地址 ' + cfg.origin];
-    const initBody = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
-
-    for (let i = 0; i < portList.length; i++) {
-      const base = hostPart + ':' + portList[i];
-      for (let k = 0; k < 2; k++) {
-        const path = k === 0 ? '/acp' : '/acp/';
-        const url = base + path;
-        let res = '';
-        try {
-          const r = await jpost('/api/fetch', {
-            url: url, method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-            body: initBody,
-          });
-          const code = r && r.status ? r.status : 'ERR';
-          const snip = String((r && (r.body || r.error)) || '').replace(/\s+/g, ' ').slice(0, 90);
-          res = code + (r && r.ok ? ' ✅ ' + snip : ' ' + snip);
-          if (r && r.ok) {
-            S.agentProto = 'acp'; S.agentUrl = base + '/?token=' + cfg.token; saveS();
-            status('ok', '✅ 找到 ACP 接口：' + url + '\n返回：' + snip + '\n已切到 ACP 模式，可以直接生成/修缮/翻译。');
-            return;
-          }
-        } catch (e) { res = 'ERR ' + e.message.slice(0, 40); }
-        log.push(url + ' → ' + res);
-      }
-    }
-    status('err', 'Agent 探测（没找到 ACP 接口）\n' + log.join('\n') + '\n\n→ 请在 DSH 设置里找「ACP / 接口 / 端口」，把那个端口告诉我。');
   }
 
   function callAI(sys, user, len) {
