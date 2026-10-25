@@ -3130,7 +3130,7 @@
 
 
   async function genSix() {
-    window.__h3Purpose = 'gen';
+window.__h3Purpose = 'plan';
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
@@ -3145,12 +3145,18 @@
       const plan = parsePlan(planTxt);
       status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
       pgSet(20);
-      let castText = '';
-      try { castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200)).trim(); } catch (e) { LOG('cast fail', e); }
-      status('run', '角色外观已锁定（' + (castText ? castText.split('\n').length : 0) + ' 行）；开始逐段写六段…');
-      pgSet(30);
-
-      const allBeats = plan.segs.map(s => s.i + '. ' + (s.beat || '')).join('\n');
+let castText = '';
+try {
+window.__h3Purpose = 'art';
+castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200)).trim();
+} catch (e) { LOG('cast fail', e); }
+let artPlan = '';
+try {
+window.__h3Purpose = 'artplan';
+artPlan = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""\n\n已提取的角色设定：\n' + (castText || '(无)') + '\n\n请在此基础上给出造型规划：每个角色在全片中的服装与状态变化顺序，以及需要几张造型参考图。', 900)).trim();
+} catch (e) { LOG('artplan fail', e); }
+window.__h3Purpose = 'plan';
+const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' + castText) : '') + (artPlan ? ('\n\n【造型规划】\n' + artPlan) : '');
       const blocksArr = new Array(plan.segs.length).fill(null);
       const GENCONC = Math.max(1, Number(S.genConc || 3));
       let nextI = 0, doneI = 0;
@@ -3161,6 +3167,7 @@
         const prevBlock = i > 0 ? blocksArr[i - 1] : null;
         const prevTail = prevBlock ? blockTail(prevBlock) : '';
         const user = '正文：\n"""\n' + text + '\n"""\n\n'
+  + (artCtx || '')
           + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
           + '【素材清单】每段第一行的 CAST 标记只能用下面清单里的原字名字；本段出现谁就写谁，没出现的不写：\n' + assets.text + '\n'
           + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld 等实拍词。\n'
