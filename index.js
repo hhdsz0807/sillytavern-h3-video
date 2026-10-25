@@ -3732,6 +3732,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       let LAST_SEG_ERR = '';
       let LAST_SEG_OUT = '';
       const GENCONC = Math.max(1, Number(S.genConc || 3));
+      status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + ' · 开始逐段写…');
       let nextI = 0, doneI = 0;
 
       async function genOne(i) {
@@ -3784,7 +3785,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         while (true) {
           const i = nextI++;
           if (i >= plan.segs.length) return;
-          try { await genOne(i); } catch (e) { LOG('gen fail', i, e); }
+          try { await genOne(i); } catch (e) { LAST_SEG_ERR = String((e && e.message) || e); LOG('gen fail', i, e); status('err', '第 ' + (i + 1) + ' 段构建失败：' + LAST_SEG_ERR.slice(0, 120)); }
           doneI++;
           pgSet(30 + 70 * (doneI / plan.segs.length));
           status('run', '已写 ' + doneI + '/' + plan.segs.length + ' 段（并发 ' + GENCONC + '）…');
