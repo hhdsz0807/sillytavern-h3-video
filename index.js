@@ -82,6 +82,7 @@
         <div class="row"><label>角色库</label>
           <button id="h3v-charUp" style="flex:none">+ 上传角色图</button>
           <button id="h3v-outfit" style="flex:none">按正文换装</button>
+          <button id="h3v-chargen" style="flex:none">补角色四视图</button>
           <span class="hint" id="h3v-charHint">每张填个中文名；分段提示词只会从这些名字里选</span>
         </div>
         <details id="h3v-charDetails" style="margin:2px 0 10px"><summary id="h3v-charSum" style="cursor:pointer;color:#8b98ab;font-size:13px">角色库（点开）</summary><div id="h3v-charList"></div></details>
@@ -458,6 +459,7 @@
     if ($('#h3v-merge2')) $('#h3v-merge2').onclick = function () { renderOut(); mergeAll(); };
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
     if ($('#h3v-outfit')) $('#h3v-outfit').onclick = outfitGen;
+    if ($('#h3v-chargen')) $('#h3v-chargen').onclick = charGen;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
     renderCharList();
     renderSceneListBox();
@@ -3394,6 +3396,101 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   const OUTFIT_SYS = `你是服装变更判定器。读正文，判断角色现在的服装是否和"已入库造型"不同。
 输出每行三个字段，用 | 分隔：角色名|服装中文名|英文服装外观描述（只描述衣服、鞋袜、配饰；脸/发型/体型不要写）
 只输出确实换过的；一个都没换就只输出 NONE。不要解释，不要编号。`;
+
+  const CHARGEN_SYS = `你是角色外观设定提取器。读正文，列出所有**出场角色**，并给出可用于出图的外观描述。
+输出每行两个字段，用 | 分隔：角色名|英文外观描述
+外观描述要求：2D 动漫赛璐璐风格的角色设定，写清年龄、发型发色、眼睛、脸型、体型、身高观感、当前服装（颜色款式）、鞋袜、随身物；不写剧情、不写场景、不写背景。只输出角色本身出现的行，不要解释。`;
+
+  async function krea2Wait(taskId) {
+    for (let t = 0; t < 100; t++) {
+      await new Promise(function (r) { setTimeout(r, 4000); });
+      const r = await withTimeout(fetch(api('/api/krea2/history')), 20000, '出图查询');
+      const j = await r.json();
+      const jobs = (j && j.jobs) || [];
+      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0] || jobs[0];
+      if (!job) continue;
+      if (job.state === 'error') throw new Error(job.error || '出图失败');
+      if (job.state === 'done') {
+        const u = (job.files || [])[0] || '';
+        const m = u.match(/filename=([^&]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+    }
+    throw new Error('出图超时');
+  }
+
+  async function qwen21Wait(taskId) {
+    for (let t = 0; t < 100; t++) {
+      await new Promise(function (r) { setTimeout(r, 5000); });
+      const r = await withTimeout(fetch(api('/api/qwen21/history')), 20000, '四视图查询');
+      const j = await r.json();
+      const jobs = (j && j.jobs) || [];
+      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0] || jobs[0];
+      if (!job) continue;
+      if (job.state === 'error') throw new Error(job.error || '四视图失败');
+      if (job.state === 'done') {
+        const u = (job.files || [])[0] || '';
+        const m = u.match(/filename=([^&]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+    }
+    throw new Error('四视图超时');
+  }
+
+  async function charGen() {
+    const text = (CURTEXT || lastMessageText() || '').trim();
+    if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
+    jobBegin('补角色四视图');
+    pgSet(5);
+    try {
+      window.__h3Purpose = 'art';
+      const known = CHARLIB.map(function (c) { return c.name; }).join('、') || '(空)';
+      status('run', '① 从正文提取出场角色…');
+      const out = await callAI(CHARGEN_SYS, '正文：\n"""\n' + text + '\n"""\n\n已在角色库：' + known, 1200);
+      const rows = String(out || '').split('\n').map(function (s) { return s.trim(); })
+        .filter(function (s) { return s && s.indexOf('|') > 0; });
+      if (!rows.length) { status('ok', '正文里没识别到角色'); pgSet(100); return; }
+
+      for (let k = 0; k < rows.length; k++) {
+        const parts = rows[k].split('|').map(function (x) { return x.trim(); });
+        const who = parts[0], desc = parts[1] || '';
+        if (!who) continue;
+        if (CHARLIB.some(function (c) { return c.name.indexOf(who) === 0; })) {
+          status('run', '「' + who + '」已在库里，跳过'); continue;
+        }
+        if (!desc) { status('err', '「' + who + '」没有外观描述，跳过'); continue; }
+
+        status('run', '② Krea2 出「' + who + '」立绘…');
+        const j1 = await jpost('/api/krea2/run', {
+          prompt: '2D anime character reference, cel-shaded, clean lineart, full body single character, plain light grey background, no text, no panel borders. Character: ' + desc,
+          aspect: '9:16 (Portrait Widescreen)', mp: 1.5, mode: 't2i', steps: 8, prefix: 'CharGen',
+        });
+        if (!j1.ok) throw new Error(j1.error || 'Krea2 提交失败');
+        const art = await krea2Wait(j1.taskId);
+        if (!art) throw new Error('立绘没出图');
+        status('run', '③ Qwen 把「' + who + '」做成四视图…');
+        const j2 = await jpost('/api/qwen21/run', {
+          image: art,
+          prompt: 'Convert this single character into an official four-view character sheet: front half-body and waist, left side full body, right side full body, back full body, all the same character with identical face, hairstyle and outfit, standing neutral pose, plain light grey background, no text, no panel lines, no extra characters. Keep 2D anime cel-shaded style.',
+          mp: 1.5, aspect: '1:1 (Square)',
+        });
+        if (!j2.ok) throw new Error(j2.error || 'Qwen 提交失败');
+        const sheet = await qwen21Wait(j2.taskId);
+        if (!sheet) throw new Error('四视图没出图');
+        CHARLIB.push({ file: sheet, name: who });
+        saveChars();
+        renderCharList();
+        pgSet(10 + 90 * ((k + 1) / rows.length));
+        status('ok', '已加入角色库：' + who);
+      }
+      status('ok', '补角色完成，角色库已更新');
+    } catch (e) {
+      status('err', '补角色失败：' + (e && e.message ? e.message : e));
+    } finally {
+      jobEnd();
+      window.__h3Purpose = 'plan';
+    }
+  }
 
   async function outfitGen() {
     const text = (CURTEXT || lastMessageText() || '').trim();
