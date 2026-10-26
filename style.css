@@ -136,3 +136,26 @@
   color: #c2d0e2 !important;
 }
 
+
+/* ===== 兜底：所有 input（含没写 type 的）强制深色底亮字 ===== */
+#h3v-dlg input,
+#h3v-dlg input:not([type]),
+#h3v-dlg input[type=text],
+#h3v-dlg input[type=number] {
+  background: #1b222c !important;
+  background-color: #1b222c !important;
+  color: #f3f7fc !important;
+  -webkit-text-fill-color: #f3f7fc !important;
+  border: 1px solid #3a4a60 !important;
+  font-size: 13.5px !important;
+}
+#h3v-dlg input::placeholder { color: #93a7bf !important; -webkit-text-fill-color: #93a7bf !important; opacity: 1 !important; }
+#h3v-dlg input:-webkit-autofill,
+#h3v-dlg input:-webkit-autofill:hover,
+#h3v-dlg input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f3f7fc !important;
+  -webkit-box-shadow: 0 0 0 1000px #1b222c inset !important;
+  caret-color: #f3f7fc;
+}
+/* 只读/禁用态也别白底 */
+#h3v-dlg input:disabled, #h3v-dlg input[readonly] { background: #232b36 !important; color: #b9c8da !important; }
