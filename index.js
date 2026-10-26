@@ -61,7 +61,7 @@
     if (keep && Array.from(sel.options).some(function (o) { return o.value === keep; })) sel.value = keep;
     else if (list.length) sel.value = (list[list.length - 1].getAttribute('mesid') || String(list.length - 1));
     pickMes();
-    if (info) info.textContent = '共 ' + list.length + ' 层';
+    if (info) info.textContent = list.length ? ('共 ' + list.length + ' 层') : '没找到楼层（点刷新）';
 
     function pickMes() {
       const el = Array.from(document.querySelectorAll('#chat .mes')).filter(function (m) {
@@ -74,6 +74,7 @@
       if (info) info.textContent = '已选 #' + sel.value + ' · ' + tx.length + ' 字';
     }
     sel.onchange = pickMes;
+    sel.onfocus = function () { if (!sel.options.length) setTimeout(function () { fillMesSel(); }, 200); };
   }
 
   function makeFab() {
@@ -604,6 +605,7 @@
             const t = text || lastMessageText();
       CURTEXT = t || '';
       CURMESID = (mesid === undefined || mesid === null) ? null : String(mesid);
+    try { fillMesSel(CURMESID); } catch (e) { try { console.warn('[h3v] fillMesSel', e); } catch (_) {} }
       reloadLibsIfCardChanged();
       const savedB = loadBlocks(CURMESID || 'last');
       const ex = extractPrompt(t);
