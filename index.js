@@ -2781,6 +2781,22 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return lines.join('\n').replace(/\n{3,}/g, '\n\n');
   }
 
+  /* 把超出实际素材数的 <Picture N> / <Audio N> 拉回合法范围，避免模型瞎指图 */
+  function clampPictureRefs(block, maxPic, maxAudio) {
+    let s = String(block || '');
+    s = s.replace(/<Picture\s*(\d+)>/gi, function (m, n) {
+      const k = Number(n);
+      if (!maxPic || k <= maxPic) return m;
+      return '<Picture ' + Math.min(maxPic, 1) + '>';
+    });
+    s = s.replace(/<Audio\s*(\d+)>/gi, function (m, n) {
+      const k = Number(n);
+      if (!maxAudio || k <= maxAudio) return m;
+      return '<Audio ' + maxAudio + '>';
+    });
+    return s;
+  }
+
   function blockTail(b) {
     const m = String(b || '').match(/detailed_description\s*:?\s*([\s\S]*?)(?:\n\s*overall_soundscape\s*:?|$)/i);
     const dd = (m ? m[1] : String(b || '')).trim();
@@ -4365,6 +4381,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         const sf = resolveScene(cast.scene);
         if (sf) files.push(sf);
         if (files.length) SEGIMG[i] = files;
+        nb = clampPictureRefs(nb, files.length || 2, (cast.cast || []).length || 1);
       }
       return nb;
     });
@@ -4428,7 +4445,12 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld 等实拍词。\n'
           + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
           + '现在只写第 ' + (i + 1) + ' 段（对应 ' + seg.from + '–' + seg.to + ' 秒，成片时长 ' + sec + ' 秒）：' + (seg.beat || '按分镜计划延续上一段')
-          + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
+          + '\n【硬约束】\n'
+    + '- 本段成片 ' + sec + ' 秒，[Shot] 最多 ' + Math.max(1, Math.min(3, Math.round(sec / 6))) + ' 个；每两镜之间至少间隔 4 秒；最后一镜不得超过 ' + (sec - 0.5).toFixed(1) + ' 秒\n'
+    + '- subject_definitions 里角色的服装/发型/体型必须**逐字照抄**上面"全片统一设定"的英文写法，禁止换同义词、禁止改颜色或款式；场景同理\n'
+    + '- <Subject N> 里只能写中文人名本身，禁止在其后追加中文名词（例如不许写"白井玄一校服""廉租房"）\n'
+    + '- 只能引用清单里实际存在的素材编号；没有第 3 张图时禁止出现 <Picture 3> 及以后\n'
+    + '\n只输出一个 [[H3]]…[[/H3]] 块（完整六段），[Shot 1] 从 0 秒开始，最后一镜不超过 ' + (sec - 0.5).toFixed(1) + ' 秒；'
           + '<Subject N> 编号沿用全片编号；只拍这一段的事。'
           + (prevTail ? '\n\n上一段结尾状态（能接上就接上；不要重拍上一段已经发生的事）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
@@ -4459,6 +4481,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           const sf = resolveScene(cast.scene);
           if (sf) files.push(sf);
           if (files.length) SEGIMG[i] = files;
+      nb = clampPictureRefs(nb, files.length || 2, (cast.cast || []).length || 1);
         }
       }
 
