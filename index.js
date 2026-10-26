@@ -219,6 +219,12 @@
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
+  <div class="row">
+    <label>楼层</label>
+    <select id="h3v-mesSel" style="flex:1;min-width:260px"></select>
+    <button id="h3v-mesReload" class="sm" style="flex:none">刷新</button>
+    <span class="hint" id="h3v-mesInfo"></span>
+  </div>
         <div class="row">
           <label>AI 补全</label>
           <select id="h3v-aiMode" style="flex:1">
