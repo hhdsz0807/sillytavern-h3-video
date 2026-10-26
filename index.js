@@ -2395,10 +2395,21 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
     // ① 浏览器直连（3099 带 CORS，最省事、不依赖 H3 APK）
     try {
-      const r = await withTimeout(fetch(url, {
-        method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
-      }), 900000, 'Agent ');
-      const txt = await r.text();
+      let r = null, txt = '';
+      const waits = [0, 3000, 8000, 15000];
+      for (let attempt = 0; attempt < waits.length; attempt++) {
+        if (waits[attempt]) {
+          status('run', 'AI 限流，' + (waits[attempt] / 1000) + ' 秒后重试（第 ' + (attempt + 1) + ' 次）…');
+          await new Promise(function (res) { setTimeout(res, waits[attempt]); });
+        }
+        r = await withTimeout(fetch(url, {
+          method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
+        }), 900000, 'Agent ');
+        txt = await r.text();
+        const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);
+        const serverErr = (r.status >= 500);
+        if (!throttled && !serverErr) break;
+      }
       let j = {};
       try { j = JSON.parse(txt); } catch (_) { j = { ok: r.ok, status: r.status, body: txt }; }
       if (j.ok === undefined) j.ok = r.ok;
@@ -4429,7 +4440,8 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       const blocksArr = new Array(plan.segs.length).fill(null);
       let LAST_SEG_ERR = '';
       let LAST_SEG_OUT = '';
-      const GENCONC = Math.max(1, Number(S.genConc || 3));
+      let GENCONC = Math.max(1, Number(S.genConc || 3));
+    if ((S.aiMode === 'agent') && GENCONC > 3) { GENCONC = 3; status('run', 'agent 模式自动限并发为 3（防 429）…'); }
       status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + ' · 开始逐段写…');
       let nextI = 0, doneI = 0;
 
