@@ -3070,6 +3070,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           }).then(r => r.json());
           if (up.error) throw new Error(up.error);
           SCENES.unshift({ name: s.name, prompt: s.prompt, style: styleKey, file: up.name, ts: Date.now() });
+        if (libOn()) { try { await libUpload('scenes', up.name, blob); } catch (e) { LOG('lib scene write fail', e); } }
           saveScenes();
           ok++;
         } catch (e) {
@@ -3959,6 +3960,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         const sheet = await qwen21Wait(j2.taskId);
         if (!sheet) throw new Error('四视图没出图');
         CHARLIB.push({ file: sheet, name: who });
+        if (libOn()) { try { const _r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(sheet))); const _b = await _r.blob(); await libUpload('chars', sheet, _b); } catch (e) { LOG('lib write fail', e); } }
         saveChars();
         renderCharList();
         pgSet(10 + 90 * ((k + 1) / rows.length));
@@ -4020,6 +4022,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         }
         if (!file) throw new Error('等待出图超时');
         CHARLIB.push({ file: file, name: target });
+        if (libOn()) { try { const _r = await fetch(api('/api/preview?type=input&filename=' + encodeURIComponent(file))); const _b = await _r.blob(); await libUpload('chars', file, _b); } catch (e) { LOG('lib write fail', e); } }
         saveChars();
         renderCharList();
         status('ok', '已加入角色库：' + target);
