@@ -4567,6 +4567,15 @@ non_diegetic_music:
     uploadAudioLib: (typeof uploadAudioLib === 'function') ? uploadAudioLib : null,
     fsaPickRoot: (typeof fsaPickRoot === 'function') ? fsaPickRoot : null,
     fillMesSel: (typeof fillMesSel === 'function') ? fillMesSel : null,
+    scenePlan: (typeof scenePlan === 'function') ? scenePlan : null,
+    sceneGen: (typeof sceneGen === 'function') ? sceneGen : null,
+    runAllBlocks: (typeof runAllBlocks === 'function') ? runAllBlocks : null,
+    runRange: (typeof runRange === 'function') ? runRange : null,
+    qcFix: (typeof qcFix === 'function') ? qcFix : null,
+    translateAll: (typeof translateAll === 'function') ? translateAll : null,
+    pingNow: (typeof pingNow === 'function') ? pingNow : null,
+    autoFindHost: (typeof autoFindHost === 'function') ? autoFindHost : null,
+    copyTemplate: (typeof copyTemplate === 'function') ? copyTemplate : null,
   };
 
   /* 兜底：所有关键按钮走事件委托，不受原绑定是否成功影响 */
@@ -4581,6 +4590,15 @@ non_diegetic_music:
       'h3v-audUp': 'uploadAudioLib',
       'h3v-fsaPick': 'fsaPickRoot',
       'h3v-mesReload': 'fillMesSel',
+      'h3v-scenePlan': 'scenePlan',
+      'h3v-sceneGen': 'sceneGen',
+      'h3v-runAll': 'runAllBlocks',
+      'h3v-runRange': 'runRange',
+      'h3v-qc': 'qcFix',
+      'h3v-trans': 'translateAll',
+      'h3v-ping': 'pingNow',
+      'h3v-autoHost': 'autoFindHost',
+      'h3v-tpl': 'copyTemplate',
     };
     const fnName = MAP[el.id];
     if (!fnName) return;
@@ -4592,7 +4610,7 @@ non_diegetic_music:
     const st = document.getElementById('h3v-status');
     try {
       if (st) st.textContent = '已触发：' + (el.textContent || '').trim();
-      fn();
+      if (el.id === 'h3v-qc') fn(false); else fn();
     } catch (e) {
       const msg = (el.textContent || '').trim() + ' 出错：' + (e && e.message ? e.message : e);
       if (st) st.textContent = msg;
