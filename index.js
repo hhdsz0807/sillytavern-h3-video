@@ -474,6 +474,7 @@
     if ($('#h3v-audUp')) $('#h3v-audUp').onclick = uploadAudioLib;
     renderAudioLib();
     try { renderOut(); } catch (_) {}
+    try { libSyncScenes(); libSyncAudios(); } catch (_) {}
     if ($('#h3v-loadapk2')) $('#h3v-loadapk2').onclick = loadVideosFromApk;
     if ($('#h3v-merge2')) $('#h3v-merge2').onclick = function () { renderOut(); mergeAll(); };
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
@@ -3328,6 +3329,34 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return libBase() + '/lib/file?card=' + encodeURIComponent(cardTag()) + '&kind=' + kind + '&name=' + encodeURIComponent(file);
   }
 
+  async function libSyncScenes() {
+    if (!libOn()) return;
+    try {
+      const items = await libList('scenes');
+      let added = 0;
+      items.forEach(function (it) {
+        if (SCENES.some(function (s) { return s.file === it.file || s.name === it.name; })) return;
+        SCENES.push({ name: it.name, file: it.file, libUrl: it.url, prompt: '', style: 'disk', ts: Date.now() });
+        added++;
+      });
+      if (added) renderSceneListBox();
+    } catch (e) { LOG('lib scenes fail', e); }
+  }
+
+  async function libSyncAudios() {
+    if (!libOn()) return;
+    try {
+      const items = await libList('audios');
+      let added = 0;
+      items.forEach(function (it) {
+        if (AUDIOLIB.some(function (a) { return a.file === it.file || a.name === it.name; })) return;
+        AUDIOLIB.push({ name: it.name, file: it.file, libUrl: it.url, ts: Date.now() });
+        added++;
+      });
+      if (added) { renderAudioLib(); fillCharAudioSelects(); }
+    } catch (e) { LOG('lib audios fail', e); }
+  }
+
   function thumbUrl(file) {
     return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
   }
@@ -3418,7 +3447,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     let html = '';
     SCENES.forEach(function (s, i) {
       html += '<div class="row">' +
-        (s.file ? '<img class="pv" data-file="' + esc(s.file) + '" style="display:block;width:64px;height:40px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(s.file) + '">' : '') +
+          (s.file ? '<img class="pv"' + (s.libUrl ? (' src="' + esc(s.libUrl) + '"') : (' data-file="' + esc(s.file) + '" src="' + thumbUrl(s.file) + '"')) + ' style="display:block;width:64px;height:40px;object-fit:cover;margin:0;border-radius:6px">' : '') +
         '<input data-sn="' + i + '" value="' + esc(s.name || '') + '" placeholder="场景名（中文）" style="flex:1">' +
         '<button data-suse="' + i + '" style="flex:none">设为默认</button>' +
         '<button data-sdel="' + i + '" style="flex:none">删</button></div>';
@@ -3666,6 +3695,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           SCENES.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), prompt: '', style: 'upload', file: j.name, ts: Date.now() });
           try { await IDB.put(j.name, files[k], 'image'); } catch (_) {}
           saveScenes();
+          if (libOn()) { try { await libUpload('scenes', files[k].name, files[k]); } catch (e) { LOG('lib scene upload fail', e); } }
           renderSceneListBox();
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
@@ -3702,7 +3732,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       el.onclick = function () {
         const a = AUDIOLIB[i];
         if (!a || !a.file) return;
-        const url = api('/api/preview?type=input&filename=' + encodeURIComponent(a.file) + '&t=' + Date.now());
+        const url = a.libUrl || api('/api/preview?type=input&filename=' + encodeURIComponent(a.file) + '&t=' + Date.now());
         try { new Audio(url).play(); status('ok', '试听：' + (a.name || a.file)); } catch (e) { status('err', '这个浏览器不支持内联播放'); }
       };
     });
@@ -3745,7 +3775,9 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           if (j.error) throw new Error(j.error);
           AUDIOLIB.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), file: j.name, ts: Date.now() });
           try { await IDB.put(j.name, files[k], 'audio'); } catch (_) {}
-          saveAudios(); renderAudioLib();
+          saveAudios();
+          if (libOn()) { try { await libUpload('audios', files[k].name, files[k]); } catch (e) { LOG('lib audio upload fail', e); } }
+          renderAudioLib();
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
       status('ok', '音频库已更新，去角色库里给角色选音色');
