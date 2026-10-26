@@ -7,7 +7,9 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: true,
+  orchHost: 'http://127.0.0.1:8800',
+  libOn: false, libBase: '', customStyle: '' };
 
   let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
@@ -530,6 +532,10 @@
     if ($('#h3v-genConc')) {
       $('#h3v-genConc').value = String(S.genConc || 3);
       $('#h3v-genConc').onchange = function () { S.genConc = Number($('#h3v-genConc').value) || 3; saveS(); };
+    }
+    if ($('#h3v-orchMode')) {
+      $('#h3v-orchMode').checked = S.orchMode !== false;
+      $('#h3v-orchMode').onchange = function () { S.orchMode = $('#h3v-orchMode').checked; saveS(); };
     }
     if ($('#h3v-autoQc')) {
       $('#h3v-autoQc').checked = !!S.autoQc;
@@ -4447,7 +4453,92 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
 
+
+  async function genSixOrch() {
+    const text = (CURTEXT || lastMessageText() || '').trim();
+    if (!text) { status('err', '没有正文'); return false; }
+    const btn = $('#h3v-gen');
+    if (btn) btn.disabled = true;
+    jobBegin('单请求编排（会话内开子代理）');
+    const t0 = Date.now();
+    try {
+      // ① 分镜规划（1 次请求）
+      window.__h3Purpose = 'plan';
+      status('run', '① 分镜规划…');
+      const planOut = await callAI(PLAN_SYS, text + '\n\n请只输出分镜计划：每段一行，格式「段号 | 起止秒 | 这段时间发生什么」。', 3000);
+      const segs = [];
+      String(planOut || '').split('\n').forEach(function (line) {
+        const m = line.match(/^\s*(\d+)\s*\|\s*([\d.]+)\s*[-–~]\s*([\d.]+)\s*\|/);
+        if (m) segs.push({ i: Number(m[1]), a: Number(m[2]), b: Number(m[3]), beat: line.split('|').slice(2).join('|').trim() });
+      });
+      if (!segs.length) throw new Error('规划没解析出分段：' + String(planOut || '').slice(0, 120));
+      const total = segs[segs.length - 1].b;
+      status('run', '① 规划完成：' + segs.length + ' 段 / ' + total + ' 秒 · 交给人会话内部扇出…');
+
+      // ② 一个请求，让这个会话自己开子代理，把每段写进文件
+      const jobId = 'job' + Date.now();
+      const dir = 'D:\\cli\\h3-out\\' + jobId;
+      const list = segs.map(function (s) {
+        const sec = Math.min(15, Math.max(3, Math.round((s.b - s.a) * 2) / 2));
+        const cap = Math.max(1, Math.min(3, Math.round(sec / 6)));
+        return 'seg-' + String(s.i).padStart(2, '0') + '.txt ← 第 ' + s.i + ' 段（' + s.a + '-' + s.b + ' 秒，成片 ' + sec + ' 秒，[Shot] 只能 ' + cap + ' 个）：' + s.beat;
+      }).join('\n');
+
+      const user = '这是一次「编排任务」，你不是逐段手写，而是用 workflow 工具扇出子代理并行完成，最后由你汇总校验。\n\n'
+        + '【正文】\n"""\n' + text + '\n"""\n\n'
+        + '【全片分镜计划（共 ' + segs.length + ' 段 / 约 ' + total + ' 秒）】\n'
+        + segs.map(function (s) { return s.i + '. ' + s.a + '-' + s.b + 's ' + s.beat; }).join('\n') + '\n\n'
+        + '【做法要求】\n'
+        + '1. 用 workflow 工具一次性 fan out ' + segs.length + ' 个子代理（同一批并行，最多 16 个并发；超过就分两批）\n'
+        + '2. 每个子代理只负责一段：按六段格式写 [[H3]]…[[/H3]]，六小节齐全，<Subject N> 服装全片统一，[Shot] 数量严格等于该段允许值\n'
+        + '3. 每个子代理把结果写进文件：' + dir + '\\seg-NN.txt（NN 是两位段号，只写块本身，不要多余解释）\n'
+        + '4. 全部写完后，你自己用 pwsh 执行 dir ' + dir + ' 检查文件数量，缺的补写\n'
+        + '5. 最后回复 6 行以内：MANIFEST=<实际文件数>/' + segs.length + ' 以及每行 seg-NN=ok 或 seg-NN=missing\n\n'
+        + '【每段分配】\n' + list;
+
+      status('run', '② 已发出 1 个编排请求（' + segs.length + ' 段由子代理并行写文件）…');
+      const outs = await callAI(SIX_SYS, user, 3000);
+      const manifest = String(outs || '');
+      status('run', '② 编排返回：' + manifest.replace(/\s+/g, ' ').slice(0, 120));
+
+      // ③ 取文件
+      const host = String(S.orchHost || 'http://127.0.0.1:8800').replace(/\/+$/, '');
+      const blocks = [];
+      let missing = 0;
+      for (let k = 0; k < segs.length; k++) {
+        const nm = 'seg-' + String(segs[k].i).padStart(2, '0') + '.txt';
+        let txt = '';
+        for (let attempt = 0; attempt < 10; attempt++) {
+          try {
+            const r = await fetch(host + '/h3out/' + jobId + '/' + nm + '?t=' + Date.now());
+            if (r.ok) { txt = await r.text(); }
+          } catch (_) {}
+          if (txt && /\[\[H3\]\]/.test(txt)) break;
+          await new Promise(function (res) { setTimeout(res, 1500); });
+        }
+        if (txt && /\[\[H3\]\]/.test(txt)) {
+          const b = extractPrompt(txt) || txt.trim();
+          blocks.push(applyVideoStyle(normalizeBlock(b)));
+        } else { missing++; }
+      }
+      if (!blocks.length) throw new Error('子代理没写出文件（检查 ' + dir + '）');
+      $('#h3v-prompt').value = blocks.map(function (b) { return '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; }).join('\n\n');
+      refreshBlockList();
+      pgSet(100);
+      status(missing ? 'err' : 'ok', '单请求编排完成：' + blocks.length + '/' + segs.length + ' 段'
+        + (missing ? '（缺 ' + missing + ' 段）' : '') + ' · 用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒');
+      return true;
+    } finally {
+      jobEnd();
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async function genSix() {
+    if (S.orchMode && S.aiMode === 'agent') {
+      try { const done = await genSixOrch(); if (done) return; }
+      catch (e) { status('err', '编排失败，回退逐段模式：' + (e && e.message ? e.message : e)); }
+    }
 window.__h3Purpose = 'plan';
     jobBegin('生成六段');
     const text = (CURTEXT || lastMessageText() || '').trim();
@@ -4578,6 +4669,86 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         } catch (_) {}
         throw new Error('一段都没生成出来' + (LAST_SEG_ERR ? ('：' + LAST_SEG_ERR) : '') + '（原始返回已写进上面的六段提示词框）');
       }
+
+    // ===== 批后交叉检查 + 定点重写（A 方案） =====
+    try {
+      const issues = [];
+      const capOf = function (seg) {
+        const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
+        return { sec: sec, shots: Math.max(1, Math.min(3, Math.round(sec / 6))) };
+      };
+      const clothOf = function (txt) {
+        const m = String(txt).match(/wearing ([^.;]{3,90})/i);
+        return m ? m[1].toLowerCase().replace(/[^a-z\s,]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      };
+      const clothes = {};
+      plan.segs.forEach(function (seg, k) {
+        const b = blocksArr[k];
+        if (!b) return;
+        const c = clothOf(b);
+        if (c) clothes[k] = c;
+      });
+      // 取出现次数最多的服装描述当基准
+      const tally = {};
+      Object.keys(clothes).forEach(function (k) { tally[clothes[k]] = (tally[clothes[k]] || 0) + 1; });
+      const ref = Object.keys(tally).sort(function (a, b2) { return tally[b2] - tally[a]; })[0] || '';
+
+      plan.segs.forEach(function (seg, k) {
+        const b = blocksArr[k];
+        if (!b) return;
+        const cap = capOf(seg);
+        const shotN = (String(b).match(/\[Shot \d+\]/g) || []).length;
+        if (shotN > cap.shots) issues.push({ k: k, why: '镜头数 ' + shotN + ' 超过上限 ' + cap.shots });
+        const pics = (String(b).match(/<Picture\s*(\d+)>/g) || []).map(function (x) { return Number(x.replace(/\D/g, '')); });
+        const maxPic = (SEGIMG[k] && SEGIMG[k].length) || 2;
+        if (pics.some(function (n) { return n > maxPic; })) issues.push({ k: k, why: '引用了不存在的 <Picture ' + Math.max.apply(null, pics) + '>（只有 ' + maxPic + ' 张图）' });
+        if (!/subject_definitions:/.test(b) || !/detailed_description:/.test(b) || !/overall_soundscape:/.test(b)) issues.push({ k: k, why: '六段结构不完整' });
+        if (ref && clothes[k] && clothes[k] !== ref) issues.push({ k: k, why: '服装与全片基准不一致（' + clothes[k].slice(0, 40) + ' ≠ ' + ref.slice(0, 40) + '）' });
+      });
+
+      if (issues.length) {
+        const uniq = {};
+        issues.forEach(function (it) { (uniq[it.k] = uniq[it.k] || []).push(it.why); });
+        const ks = Object.keys(uniq).map(Number);
+        status('run', '交叉检查发现 ' + ks.length + ' 段问题（第 ' + ks.map(function (k) { return k + 1; }).join('/') + '），正在定点重写…');
+        let fixedN = 0;
+        let cursor = 0;
+        const REPAIR_CONC = Math.min(6, ks.length);
+        async function repairWorker(lane) {
+          for (;;) {
+            const at = cursor++;
+            if (at >= ks.length) return;
+            const k = ks[at];
+            const seg = plan.segs[k];
+            const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
+            try {
+              const fixUser = '这是同一批里的第 ' + (k + 1) + ' 段，上一版不合格，需要只修下列问题并重新输出完整一块：\n- '
+                + uniq[k].join('\n- ')
+                + '\n\n本段成片 ' + sec + ' 秒，[Shot] 只能有 ' + Math.max(1, Math.min(3, Math.round(sec / 6))) + ' 个；全片服装统一写作：'
+                + (ref || '（沿用原描述）')
+                + '\n\n正文：\n"""\n' + text + '\n"""\n\n本段内容：' + (seg.beat || '')
+                + '\n\n只输出一个 [[H3]]…[[/H3]] 块。';
+              const out = await callAI(SIX_SYS, fixUser, 3000);
+              const b2 = extractPrompt(out) || String(out || '').trim();
+              if (b2) {
+                let nb2 = applyVideoStyle(normalizeBlock(b2));
+                nb2 = clampPictureRefs(nb2, (SEGIMG[k] && SEGIMG[k].length) || 2, 1);
+                blocksArr[k] = nb2;
+                fixedN++;
+              }
+            } catch (e) { LOG('repair fail', k, e); }
+          }
+        }
+        const rw = [];
+        for (let w = 0; w < REPAIR_CONC; w++) rw.push(repairWorker(w));
+        await Promise.all(rw);
+        status('ok', '交叉检查完成：' + ks.length + ' 段有问题，已重写 ' + fixedN + ' 段');
+      } else {
+        status('ok', '交叉检查通过：结构/镜头数/素材引用/服装一致');
+      }
+    } catch (e) { LOG('cross-check fail', e); }
+
+
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
       if (S.autoQc) { try { await qcFix(true); } catch (_) {} }
       refreshBlockList();
