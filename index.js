@@ -2826,6 +2826,12 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   /* 把超出实际素材数的 <Picture N> / <Audio N> 拉回合法范围，避免模型瞎指图 */
+  /* 镜头数硬性要求，拼进 system 尾部 */
+  function shotRule(sec) {
+    const n = Math.max(1, Math.min(3, Math.round(Number(sec) / 6)));
+    return '\n\n【本段绝对硬性要求】只能输出 ' + n + ' 个 [Shot]（编号 [Shot 1] 连续到 [Shot ' + n + ']），多一个都算不合格；每镜至少 4 秒。';
+  }
+
   function clampPictureRefs(block, maxPic, maxAudio) {
     let s = String(block || '');
     s = s.replace(/<Picture\s*(\d+)>/gi, function (m, n) {
@@ -4502,7 +4508,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           + (prevTail ? '\n\n上一段结尾状态（能接上就接上；不要重拍上一段已经发生的事）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
         let out = '';
-        try { out = await callAI(SIX_SYS, user, 3000); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
+        try { out = await callAI(SIX_SYS + shotRule(sec), user, 3000); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
         LAST_SEG_OUT = String(out || '').slice(0, 400);
@@ -4518,6 +4524,25 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         const cast = parseCastLine(b);
         if (cast) { b = b.replace(cast.raw, '').trim(); }
         let nb = normalizeBlock(b);
+    {
+      // 镜头数硬校验：超上限就让模型按上限重写一次
+      const maxShot = Math.max(1, Math.min(3, Math.round(sec / 6)));
+      const cnt = (String(nb).match(/\[Shot \d+\]/g) || []).length;
+      if (cnt > maxShot) {
+        status('run', '第 ' + (i + 1) + ' 段镜头数 ' + cnt + ' 超过上限 ' + maxShot + '，重写一次…');
+        try {
+          const fixUser = user + '\n\n【上一版不合格】你写了 ' + cnt + ' 个 [Shot]，本段只允许 ' + maxShot + ' 个。请把内容合并成正好 ' + maxShot + ' 个镜头（[Shot 1]' + (maxShot > 1 ? '…[Shot ' + maxShot + ']' : '') + '），每镜至少 4 秒，其余信息压缩进这两个镜头，不要新增镜头。';
+          const out3 = await callAI(SIX_SYS, fixUser, 3000);
+          const b3 = extractPrompt(out3) || String(out3 || '').trim();
+          if (b3) {
+            const nb3 = applyVideoStyle(normalizeBlock(b3));
+            const c3 = (String(nb3).match(/\[Shot \d+\]/g) || []).length;
+            if (c3 > 0 && c3 <= maxShot) { nb = nb3; }
+            else { LOG('shot fix still over', i, cnt, c3); }
+          }
+        } catch (e) { LOG('shot fix fail', i, e); }
+      }
+    }
         nb = ensureAudioTags(nb, cast);
         nb = applyVideoStyle(nb);
         blocksArr[i] = nb;
