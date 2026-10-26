@@ -391,7 +391,7 @@
     $('#h3v-host').onchange = () => { S.host = ($('#h3v-host').value || DEFA.host).trim().replace(/\/+$/, ''); saveS(); pingNow(); };
     $('#h3v-ping').onclick = pingNow;
     if ($('#h3v-autoHost')) $('#h3v-autoHost').onclick = autoFindHost;
-    $('#h3v-diag').onclick = () => {
+    if ($('#h3v-diag')) $('#h3v-diag').onclick = () => {
       const u = api('/api/mm/meta');
       try { window.open(u, '_blank'); } catch (_) {}
       status('run', '已在新标签打开：' + u + '\n能显示 JSON = 服务正常；一直转圈 = APP 没开/被冻结');
