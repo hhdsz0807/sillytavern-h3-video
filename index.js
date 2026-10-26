@@ -1709,6 +1709,14 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       if (r) return r;
     } catch (e) { tries.push('backend proxy: ' + e.message); }
 
+    // 5) 酒馆链路被限流时，如果配了本机 Agent，自动改走 Agent 重试一次
+    if (/Too Many Requests|429|rate limit/i.test(tries.join(' ')) && agentCfg().raw) {
+      try {
+        status('run', '酒馆链路被限流，自动改用本机 Agent 重试…');
+        return await agentGenerate(sys, user, len);
+      } catch (e2) { tries.push('自动改用本机 Agent: ' + e2.message); }
+    }
+
     throw new Error('都试过了没用：' + (tries.join(' | ') || '没有可用的生成接口'));
   }
 
@@ -4765,6 +4773,22 @@ non_diegetic_music:
       alert(msg);
     }
   }, true);
+
+  /* 兜底：关键下拉的 change 也走委托，避免原绑定失效导致设置不生效 */
+  document.addEventListener('change', function (ev) {
+    const el = ev.target;
+    if (!el || !el.id) return;
+    const MAP = {
+      'h3v-aiMode': function (v) { S.aiMode = v; },
+      'h3v-videoStyle': function (v) { S.videoStyle = v; },
+      'h3v-sceneStyle': function (v) { S.sceneStyle = v; },
+      'h3v-libMode': function (v) { S.libMode = v; },
+      'h3v-aspect': function (v) { S.aspect = v; },
+    };
+    const fn = MAP[el.id];
+    if (!fn) return;
+    try { fn(String(el.value || '').trim()); saveS(); } catch (_) {}
+  }, false);
 
   function boot() {
     try {
