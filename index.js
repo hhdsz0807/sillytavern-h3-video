@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 6, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
 
   let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
@@ -2397,7 +2397,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   /* 全局闸门：DSH/模型端对并发很敏感，同一时刻最多 2 个请求，间隔 1.2s */
-  const AGENT_GATE = { running: 0, max: 8, gap: 300, last: 0, chain: Promise.resolve() };
+  const AGENT_GATE = { running: 0, max: 16, gap: 200, last: 0, chain: Promise.resolve() };
 
   function agentGate(fn) {
     const run = async function () {
@@ -4480,7 +4480,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       let LAST_SEG_ERR = '';
       let LAST_SEG_OUT = '';
       let GENCONC = Math.max(1, Number(S.genConc || 3));
-    if ((S.aiMode === 'agent') && GENCONC > 8) { GENCONC = 8; status('run', 'agent 模式并发上限 8…'); }
+    if ((S.aiMode === 'agent') && GENCONC > 16) { GENCONC = 16; status('run', 'agent 模式并发上限 16…'); }
       status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + ' · 开始逐段写…');
       let nextI = 0, doneI = 0;
 
