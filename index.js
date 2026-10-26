@@ -2388,6 +2388,29 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return { raw: raw, origin: raw, token: '', path: path, url: raw + path };
   }
 
+  /* 全局闸门：DSH/模型端对并发很敏感，同一时刻最多 2 个请求，间隔 1.2s */
+  const AGENT_GATE = { running: 0, max: 2, gap: 1200, last: 0, chain: Promise.resolve() };
+
+  function agentGate(fn) {
+    const run = async function () {
+      while (AGENT_GATE.running >= AGENT_GATE.max) {
+        await new Promise(function (r) { setTimeout(r, 250); });
+      }
+      AGENT_GATE.running++;
+      try {
+        const wait = Math.max(0, AGENT_GATE.gap - (Date.now() - AGENT_GATE.last));
+        if (wait) await new Promise(function (r) { setTimeout(r, wait); });
+        AGENT_GATE.last = Date.now();
+        return await fn();
+      } finally {
+        AGENT_GATE.running--;
+      }
+    };
+    const p = AGENT_GATE.chain.then(run, run);
+    AGENT_GATE.chain = p.catch(function () {});
+    return p;
+  }
+
   async function agentHttp(url, bodyStr, method) {
     const verb = (method || 'POST').toUpperCase();
     const headers = { 'Content-Type': 'application/json' };
@@ -2396,15 +2419,17 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     // ① 浏览器直连（3099 带 CORS，最省事、不依赖 H3 APK）
     try {
       let r = null, txt = '';
-      const waits = [0, 3000, 8000, 15000];
+      const waits = [0, 5000, 15000, 30000, 60000];
       for (let attempt = 0; attempt < waits.length; attempt++) {
         if (waits[attempt]) {
           status('run', 'AI 限流，' + (waits[attempt] / 1000) + ' 秒后重试（第 ' + (attempt + 1) + ' 次）…');
           await new Promise(function (res) { setTimeout(res, waits[attempt]); });
         }
-        r = await withTimeout(fetch(url, {
-          method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
-        }), 900000, 'Agent ');
+        r = await agentGate(function () {
+          return withTimeout(fetch(url, {
+            method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
+          }), 900000, 'Agent ');
+        });
         txt = await r.text();
         const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);
         const serverErr = (r.status >= 500);
@@ -4441,7 +4466,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       let LAST_SEG_ERR = '';
       let LAST_SEG_OUT = '';
       let GENCONC = Math.max(1, Number(S.genConc || 3));
-    if ((S.aiMode === 'agent') && GENCONC > 3) { GENCONC = 3; status('run', 'agent 模式自动限并发为 3（防 429）…'); }
+    if ((S.aiMode === 'agent') && GENCONC > 2) { GENCONC = 2; status('run', 'agent 模式自动限并发为 2（防 429）…'); }
       status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + ' · 开始逐段写…');
       let nextI = 0, doneI = 0;
 
