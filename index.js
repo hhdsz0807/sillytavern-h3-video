@@ -564,8 +564,18 @@
       }
       if ($('#h3v-fsaPick')) {
         $('#h3v-fsaPick').onclick = async function () {
-          try { await fsaPickRoot(); S.libOn = true; if ($('#h3v-libOn')) $('#h3v-libOn').checked = true; renderCharList(); renderSceneListBox(); }
-          catch (e) { status('err', '选文件夹失败：' + e.message); }
+          try {
+            status('run', '点击已收到，准备选文件夹…');
+            const h = await fsaPickRoot();
+            if (!h) return;
+            S.libOn = true;
+            if ($('#h3v-libOn')) $('#h3v-libOn').checked = true;
+            renderCharList();
+            renderSceneListBox();
+          } catch (e) {
+            alert('选文件夹出错：' + (e && e.message ? e.message : e));
+            status('err', '选文件夹出错：' + (e && e.message ? e.message : e));
+          }
         };
       }
       $('#h3v-libBase').oninput = function () { S.libBase = $('#h3v-libBase').value.trim(); saveS(); };
@@ -3462,13 +3472,30 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function fsaPickRoot() {
-    if (!fsaSupported()) { status('err', '这个浏览器不支持选文件夹（要用 Chrome/Edge 桌面版）'); return null; }
-    const h = await window.showDirectoryPicker({ mode: 'readwrite', id: 'h3v-lib' });
-    FSA_ROOT = h;
-    await fsaSave(h);
-    S.libMode = 'fsa'; saveS();
-    status('ok', '已绑定文件夹：' + h.name + '（会在这里建 角色库/场景库/音频库）');
-    return h;
+    if (!fsaSupported()) {
+      alert('这个浏览器不支持「选择文件夹」\n\n需要 Chrome / Edge 桌面版（Firefox、手机浏览器都不行）。\n可以先用「服务地址」模式：http://127.0.0.1:8800');
+      status('err', '浏览器不支持 File System Access API');
+      return null;
+    }
+    status('run', '正在弹出文件夹选择框…（如果没看到，检查是不是被浏览器拦了弹窗）');
+    try {
+      const h = await window.showDirectoryPicker({ mode: 'readwrite', id: 'h3v-lib' });
+      FSA_ROOT = h;
+      await fsaSave(h);
+      S.libMode = 'fsa';
+      saveS();
+      status('ok', '已绑定文件夹：' + h.name + '（会在这里建 角色库/场景库/音频库）');
+      return h;
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      if (/abort/i.test(msg) || (e && e.name === 'AbortError')) {
+        status('err', '已取消选择文件夹');
+      } else {
+        alert('打开文件夹选择失败：' + msg + '\n\n常见原因：\n1) 用的不是 Chrome/Edge\n2) 页面不是 localhost/127.0.0.1（安全上下文）\n3) 文件夹选择器被浏览器策略拦截');
+        status('err', '选文件夹失败：' + msg);
+      }
+      return null;
+    }
   }
 
   function fsaKindDirName(kind) {
@@ -4509,6 +4536,28 @@ non_diegetic_music:
       if (btn) btn.click();
     }
   });
+
+  /* 兜底：事件委托绑定「选择文件夹」，不怕初始化顺序/前面报错 */
+  document.addEventListener('click', async function (ev) {
+    const el = ev.target && ev.target.closest ? ev.target.closest('#h3v-fsaPick') : null;
+    if (!el) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    try {
+      const st = document.getElementById('h3v-status');
+      if (st) st.textContent = '点击已收到，准备选文件夹…';
+      const h = await fsaPickRoot();
+      if (h) {
+        S.libOn = true;
+        const cb = document.getElementById('h3v-libOn');
+        if (cb) cb.checked = true;
+        saveS();
+        try { renderCharList(); renderSceneListBox(); } catch (_) {}
+      }
+    } catch (e) {
+      alert('选文件夹出错：' + (e && e.message ? e.message : e));
+    }
+  }, true);
 
   function boot() {
     try {
