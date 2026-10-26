@@ -2429,10 +2429,11 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     });
   }
 
-  async function agentHttp(url, bodyStr, method) {
+  async function agentHttp(url, bodyStr, method, purpose) {
     const verb = (method || 'POST').toUpperCase();
     const headers = { 'Content-Type': 'application/json' };
-    if (window.__h3Purpose) headers['X-DSH-Session'] = window.__h3Purpose;
+    const pur = purpose || window.__h3Purpose;
+    if (pur) headers['X-DSH-Session'] = pur;
 
     // ① 浏览器直连（3099 带 CORS，最省事、不依赖 H3 APK）
     try {
@@ -2501,7 +2502,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   /* ---------- 本机 Agent（3099 OpenAI 兼容） ---------- */
-  async function agentGenerate(sys, user, len) {
+  async function agentGenerate(sys, user, len, purpose) {
     const cfg = agentCfg();
     const body = {
       model: S.aiModel || 'default',
@@ -2510,7 +2511,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       stream: false,
     };
     jobLabel('调本机 Agent');
-    const r = await agentHttp(cfg.url, JSON.stringify(body));
+    const r = await agentHttp(cfg.url, JSON.stringify(body), 'POST', purpose);
     if (!r || !r.ok) {
       const detail = r && (r.error || (r.status + ' ' + String(r.body || '').slice(0, 140)));
       throw new Error('Agent 调用失败：' + detail);
@@ -2581,11 +2582,11 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     }
   }
 
-  function callAI(sys, user, len) {
+  function callAI(sys, user, len, purpose) {
     jobLabel(S.aiMode === 'api' ? '调自定义 API' : '等酒馆生成');
     const one = function () {
       return withPreset(sys, user).then(function (pair) {
-        if (S.aiMode === 'agent') return agentGenerate(pair[0], pair[1], len);
+        if (S.aiMode === 'agent') return agentGenerate(pair[0], pair[1], len, purpose);
         return (S.aiMode === 'api') ? apiGenerate(pair[0], pair[1], len) : stGenerate(pair[0], pair[1], len);
       });
     };
@@ -4589,7 +4590,8 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
 
       async function genOne(i) {
     // 每个并发走独立会话泳道，避免全部排进同一个 DSH 会话
-    window.__h3Purpose = 'plan#' + ((i % (typeof GENCONC === 'number' && GENCONC > 0 ? GENCONC : 1)) + 1);
+    const LANE_PURPOSE = 'plan#' + ((i % (typeof GENCONC === 'number' && GENCONC > 0 ? GENCONC : 1)) + 1);
+    window.__h3Purpose = LANE_PURPOSE;
         const seg = plan.segs[i];
         const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
         const prevBlock = i > 0 ? blocksArr[i - 1] : null;
@@ -4611,14 +4613,14 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           + (prevTail ? '\n\n上一段结尾状态（能接上就接上；不要重拍上一段已经发生的事）：\n' + prevTail : '');
         jobLabel('生成六段 · 第 ' + (i + 1) + '/' + plan.segs.length + ' 段（' + sec + 's）');
         let out = '';
-        try { out = await callAI(SIX_SYS + shotRule(sec), user, 3000); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
+        try { out = await callAI(SIX_SYS + shotRule(sec), user, 3000, LANE_PURPOSE); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
         let b = extractPrompt(out);
         if (!b) b = String(out || '').trim();
         LAST_SEG_OUT = String(out || '').slice(0, 400);
         if (b && !/<Picture\s*\d/i.test(b)) {
           try {
             const retryUser = user + '\n\n注意：上一版一个 Picture 编号都没写。本次必须在 subject_definitions 里给角色/场景标注 <Picture N>。';
-            const out2 = await callAI(SIX_SYS, retryUser, 3000);
+            const out2 = await callAI(SIX_SYS, retryUser, 3000, LANE_PURPOSE);
             const b2 = extractPrompt(out2) || String(out2 || '').trim();
             if (b2 && /<Picture\s*\d/i.test(b2)) b = b2;
           } catch (e) { LOG('picture retry fail', i, e); }
