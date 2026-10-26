@@ -3512,6 +3512,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         S.libOn = true;
         saveS();
         try { renderCharList(); renderSceneListBox(); } catch (_) {}
+        try { libSyncScenes(); libSyncAudios(); } catch (_) {}
         status('ok', '已恢复对「' + h.name + '」的访问');
         return h;
       }
@@ -3801,6 +3802,10 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   function renderSceneListBox() {
     const box = $('#h3v-sceneListBox');
     if (!box) return;
+    if (!SCENES.length && libOn() && !window.__h3vSceneSyncing) {
+      window.__h3vSceneSyncing = true;
+      Promise.resolve().then(function () { return libSyncScenes(); }).catch(function () {}).then(function () { window.__h3vSceneSyncing = false; });
+    }
     const ssum = $('#h3v-sceneSum');
     if (ssum) ssum.textContent = '场景库（' + SCENES.length + ' 张，点开）';
     if (!SCENES.length) { box.innerHTML = '<div class="hint">场景库还是空的：先用上面「按正文出场景提示词 → 生成全部场景」，或点「+ 上传场景图」</div>'; return; }
@@ -4097,6 +4102,10 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   function renderAudioLib() {
     const box = $('#h3v-audList');
     if (!box) return;
+    if (!AUDIOLIB.length && libOn() && !window.__h3vAudioSyncing) {
+      window.__h3vAudioSyncing = true;
+      Promise.resolve().then(function () { return libSyncAudios(); }).catch(function () {}).then(function () { window.__h3vAudioSyncing = false; });
+    }
     const sum = $('#h3v-audSum');
     if (sum) sum.textContent = '音频库（' + AUDIOLIB.length + ' 条，点开）';
     if (!AUDIOLIB.length) { box.innerHTML = '<div class="hint">还没有音频</div>'; return; }
