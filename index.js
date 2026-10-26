@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: false,
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: false, pairSegs: true,
   orchHost: 'http://127.0.0.1:8800',
   libOn: false, libBase: '', customStyle: '' };
 
@@ -252,6 +252,7 @@
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <label style="min-width:auto">并发</label>
           <input type="number" id="h3v-genConc" min="1" max="16" step="1" value="8" style="max-width:56px;flex:none">
+          <label style="min-width:auto"><input type="checkbox" id="h3v-pairSegs"> 两段一请求（省一半请求）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-orchMode"> 单请求编排（仅会话模式，默认关）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
@@ -541,6 +542,10 @@
     if ($('#h3v-genConc')) {
       $('#h3v-genConc').value = String(S.genConc || 3);
       $('#h3v-genConc').onchange = function () { S.genConc = Number($('#h3v-genConc').value) || 3; saveS(); };
+    }
+    if ($('#h3v-pairSegs')) {
+      $('#h3v-pairSegs').checked = S.pairSegs !== false;
+      $('#h3v-pairSegs').onchange = function () { S.pairSegs = $('#h3v-pairSegs').checked; saveS(); };
     }
     if ($('#h3v-orchMode')) {
       $('#h3v-orchMode').checked = S.orchMode === true;
@@ -4611,7 +4616,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       let LAST_SEG_OUT = '';
       let GENCONC = Math.max(1, Number(S.genConc || 3));
     if ((S.aiMode === 'agent') && GENCONC > 16) { GENCONC = 16; status('run', 'agent 模式并发上限 16…'); }
-      status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + ' · 开始逐段写…');
+      status('run', '规划段数 ' + plan.segs.length + ' 段（总时长 ' + plan.total + 's）· 并发 ' + GENCONC + (S.pairSegs !== false ? ' · 2 段/请求（约 ' + Math.ceil(plan.segs.length / 2) + ' 次）' : '') + ' · 开始写…');
       let nextI = 0, doneI = 0;
 
       async function genOne(i) {
@@ -4651,32 +4656,39 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
             if (b2 && /<Picture\s*\d/i.test(b2)) b = b2;
           } catch (e) { LOG('picture retry fail', i, e); }
         }
-        if (!b) return;
-        const cast = parseCastLine(b);
-        if (cast) { b = b.replace(cast.raw, '').trim(); }
-        let nb = normalizeBlock(b);
-    {
-      // 镜头数硬校验：超上限就让模型按上限重写一次
-      const maxShot = Math.max(1, Math.min(3, Math.round(sec / 6)));
-      const cnt = (String(nb).match(/\[Shot \d+\]/g) || []).length;
-      if (cnt > maxShot) {
-        status('run', '第 ' + (i + 1) + ' 段镜头数 ' + cnt + ' 超过上限 ' + maxShot + '，重写一次…');
-        try {
-          const fixUser = user + '\n\n【上一版不合格】你写了 ' + cnt + ' 个 [Shot]，本段只允许 ' + maxShot + ' 个。请把内容合并成正好 ' + maxShot + ' 个镜头（[Shot 1]' + (maxShot > 1 ? '…[Shot ' + maxShot + ']' : '') + '），每镜至少 4 秒，其余信息压缩进这两个镜头，不要新增镜头。';
-          const out3 = await callAI(SIX_SYS, fixUser, 3000, LANE_PURPOSE);
-          const b3 = extractPrompt(out3) || String(out3 || '').trim();
-          if (b3) {
-            const nb3 = applyVideoStyle(normalizeBlock(b3));
-            const c3 = (String(nb3).match(/\[Shot \d+\]/g) || []).length;
-            if (c3 > 0 && c3 <= maxShot) { nb = nb3; }
-            else { LOG('shot fix still over', i, cnt, c3); }
-          }
-        } catch (e) { LOG('shot fix fail', i, e); }
+        if (!b) return null;
+        return await shapeSeg(i, b, sec, user, LANE_PURPOSE);
       }
-    }
+
+      // 单块落地：规范化 → 镜头数硬校验（超了重写一次）→ 音频标签 → 画风 → 合并镜头 → 记 CAST/图
+      async function shapeSeg(i, b, sec, user, lane) {
+        if (!b) return null;
+        let s = String(b);
+        const cast = parseCastLine(s);
+        if (cast) { s = s.replace(cast.raw, '').trim(); }
+        let nb = normalizeBlock(s);
+        {
+          // 镜头数硬校验：超上限就让模型按上限重写一次
+          const maxShot = Math.max(1, Math.min(3, Math.round(sec / 6)));
+          const cnt = (String(nb).match(/\[Shot \d+\]/g) || []).length;
+          if (cnt > maxShot) {
+            status('run', '第 ' + (i + 1) + ' 段镜头数 ' + cnt + ' 超过上限 ' + maxShot + '，重写一次…');
+            try {
+              const fixUser = user + '\n\n【上一版不合格】你写了 ' + cnt + ' 个 [Shot]，本段只允许 ' + maxShot + ' 个。请把内容合并成正好 ' + maxShot + ' 个镜头（[Shot 1]' + (maxShot > 1 ? '…[Shot ' + maxShot + ']' : '') + '），每镜至少 4 秒，其余信息压缩进这两个镜头，不要新增镜头。';
+              const out3 = await callAI(SIX_SYS, fixUser, 3000, lane);
+              const b3 = extractPrompt(out3) || String(out3 || '').trim();
+              if (b3) {
+                const nb3 = applyVideoStyle(normalizeBlock(b3));
+                const c3 = (String(nb3).match(/\[Shot \d+\]/g) || []).length;
+                if (c3 > 0 && c3 <= maxShot) { nb = nb3; }
+                else { LOG('shot fix still over', i, cnt, c3); }
+              }
+            } catch (e) { LOG('shot fix fail', i, e); }
+          }
+        }
         nb = ensureAudioTags(nb, cast);
         nb = applyVideoStyle(nb);
-    nb = mergeShots(nb, Math.max(1, Math.min(3, Math.round(sec / 6))));
+        nb = mergeShots(nb, Math.max(1, Math.min(3, Math.round(sec / 6))));
         blocksArr[i] = nb;
         if (cast) {
           SEGCAST[i] = cast;
@@ -4685,24 +4697,96 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           const sf = resolveScene(cast.scene);
           if (sf) files.push(sf);
           if (files.length) SEGIMG[i] = files;
-      nb = clampPictureRefs(nb, files.length || 2, (cast.cast || []).length || 1);
+          nb = clampPictureRefs(nb, files.length || 2, (cast.cast || []).length || 1);
+        }
+        return nb;
+      }
+
+      // 两段一请求：一次调用连写相邻两段。浏览器每源只有 6 条连接，减半请求数才提得动速
+      function splitBlocks(txt) {
+        const m = String(txt || '').match(/\[\[H3\]\][\s\S]*?\[\[\/H3\]\]/gi) || [];
+        return m.map(function (x) {
+          return x.replace(/^\[\[H3\]\]/i, '').replace(/\[\[\/H3\]\]\s*$/i, '').trim();
+        });
+      }
+
+      async function genPair(i) {
+        const j = i + 1;
+        const segA = plan.segs[i], segB = plan.segs[j];
+        const secA = Math.min(15, Math.max(3, Math.round((segA.to - segA.from) * 2) / 2));
+        const secB = Math.min(15, Math.max(3, Math.round((segB.to - segB.from) * 2) / 2));
+        const capA = Math.max(1, Math.min(3, Math.round(secA / 6)));
+        const capB = Math.max(1, Math.min(3, Math.round(secB / 6)));
+        const prevTail = (i > 0 && blocksArr[i - 1]) ? blockTail(blocksArr[i - 1]) : '';
+        const lane = 'plan#' + ((i % GENCONC) + 1);
+        window.__h3Purpose = lane;
+        const user = '正文：\n"""\n' + text + '\n"""\n\n'
+          + (artCtx || '')
+          + (castText ? '全片统一设定（必须原样沿用，颜色/款式/编号都不许改）：\n' + castText + '\n\n' : '')
+          + '【素材清单】每段第一行的 CAST 标记只能用下面清单里的原字名字；本段出现谁就写谁，没出现的不写：\n' + assets.text + '\n'
+          + '【画风】全片画风＝' + (S.videoStyle || 'anime') + '。每段 detailed_description 第一句必须写风格；画风为 anime 时禁止出现 live-action / photorealistic / film grain / handheld 等实拍词。\n'
+          + '整片分镜计划（共 ' + plan.segs.length + ' 段，总时长约 ' + plan.total + ' 秒）：\n' + allBeats + '\n\n'
+          + '现在**连写相邻两段**：\n'
+          + '第 ' + (i + 1) + ' 段（对应 ' + segA.from + '–' + segA.to + ' 秒，成片 ' + secA + ' 秒）：' + (segA.beat || '')
+          + '\n第 ' + (j + 1) + ' 段（对应 ' + segB.from + '–' + segB.to + ' 秒，成片 ' + secB + ' 秒）：' + (segB.beat || '')
+          + '\n\n【硬约束】\n'
+          + '- 必须输出 **2 个** [[H3]]…[[/H3]] 块：第 ' + (i + 1) + ' 段在前，第 ' + (j + 1) + ' 段在后，两块之间空一行；绝对不要合并成一块\n'
+          + '- 第 ' + (i + 1) + ' 段：正好 ' + capA + ' 个 [Shot]，最后一镜不超过 ' + (secA - 0.5).toFixed(1) + ' 秒\n'
+          + '- 第 ' + (j + 1) + ' 段：正好 ' + capB + ' 个 [Shot]，最后一镜不超过 ' + (secB - 0.5).toFixed(1) + ' 秒\n'
+          + '- 第 ' + (j + 1) + ' 段从第 ' + (i + 1) + ' 段的结尾状态往下演（同场景/同服装/同光线延续），不要重拍第 ' + (i + 1) + ' 段已经发生的事\n'
+          + '- subject_definitions 里服装/发型/体型必须逐字照抄上面"全片统一设定"；<Subject N> 里只写中文人名本身\n'
+          + '- 两块都要写 <Picture N>（角色/场景）；只引用清单里实际存在的编号\n'
+          + '- <Subject N> 编号沿用全片编号；只拍这两段的事\n'
+          + (prevTail ? '\n上一段（' + i + '）结尾状态，供衔接：\n' + prevTail : '');
+        jobLabel('生成六段 · 第 ' + (i + 1) + '+' + (j + 1) + '/' + plan.segs.length + ' 段（' + secA + 's+' + secB + 's）');
+        let out = '';
+        try {
+          out = await callAI(SIX_SYS, user, 7000, lane);
+        } catch (e) {
+          LAST_SEG_ERR = String((e && e.message) || e);
+          LOG('pair fail', i, e);
+          status('err', '第 ' + (i + 1) + '/' + (j + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120));
+        }
+        LAST_SEG_OUT = String(out || '').slice(0, 400);
+        const got = splitBlocks(out);
+        const parts = [{ k: i, sec: secA, txt: got[0] || '' }, { k: j, sec: secB, txt: got[1] || '' }];
+        for (let t = 0; t < parts.length; t++) {
+          const p = parts[t];
+          if (!p.txt || !/<Picture\s*\d/i.test(p.txt)) {
+            LOG('pair fallback', p.k + 1, p.txt ? 'no-picture' : 'no-block');
+            await genOne(p.k);   // 退回单段（自带 Picture 重写）
+            continue;
+          }
+          try {
+            const r = await shapeSeg(p.k, p.txt, p.sec, user, lane);
+            if (!r) await genOne(p.k);
+          } catch (e) { LOG('pair shape fail', p.k, e); await genOne(p.k); }
         }
       }
 
       async function genWorker() {
         while (true) {
-          const i = nextI++;
+          const i = nextI;
           if (i >= plan.segs.length) return;
-          try { await genOne(i); } catch (e) { LAST_SEG_ERR = String((e && e.message) || e); LOG('gen fail', i, e); status('err', '第 ' + (i + 1) + ' 段构建失败：' + LAST_SEG_ERR.slice(0, 120)); }
-          doneI++;
-          pgSet(30 + 70 * (doneI / plan.segs.length));
-          status('run', '已写 ' + doneI + '/' + plan.segs.length + ' 段（并发 ' + GENCONC + '）…');
+          if (S.pairSegs !== false && i + 1 < plan.segs.length) {
+            nextI = i + 2;
+            try { await genPair(i); } catch (e) { LAST_SEG_ERR = String((e && e.message) || e); LOG('gen fail', i, e); status('err', '第 ' + (i + 1) + '/' + (i + 2) + ' 段构建失败：' + LAST_SEG_ERR.slice(0, 120)); }
+            doneI += 2;
+          } else {
+            nextI = i + 1;
+            try { await genOne(i); } catch (e) { LAST_SEG_ERR = String((e && e.message) || e); LOG('gen fail', i, e); status('err', '第 ' + (i + 1) + ' 段构建失败：' + LAST_SEG_ERR.slice(0, 120)); }
+            doneI += 1;
+          }
+          pgSet(30 + 70 * (Math.min(doneI, plan.segs.length) / plan.segs.length));
+          status('run', '已写 ' + Math.min(doneI, plan.segs.length) + '/' + plan.segs.length + ' 段（并发 ' + GENCONC + (S.pairSegs !== false ? ' · 2 段/请求' : '') + '）…');
         }
       }
 
+      const __tokPrev = MAXTOK_OVERRIDE;
+      if (S.pairSegs !== false) MAXTOK_OVERRIDE = 7000;   // 两块一起出，输出更长
       const workers = [];
       for (let k = 0; k < Math.min(GENCONC, plan.segs.length); k++) workers.push(genWorker());
-      await Promise.all(workers);
+      try { await Promise.all(workers); } finally { MAXTOK_OVERRIDE = __tokPrev; }
       const blocks = blocksArr.filter(Boolean);
       if (!blocks.length) {
         try {
