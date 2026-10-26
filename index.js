@@ -4559,6 +4559,47 @@ non_diegetic_music:
     }
   }, true);
 
+  window.H3Fns = {
+    uploadChar: (typeof uploadChar === 'function') ? uploadChar : null,
+    outfitGen: (typeof outfitGen === 'function') ? outfitGen : null,
+    charGen: (typeof charGen === 'function') ? charGen : null,
+    uploadScene: (typeof uploadScene === 'function') ? uploadScene : null,
+    uploadAudioLib: (typeof uploadAudioLib === 'function') ? uploadAudioLib : null,
+    fsaPickRoot: (typeof fsaPickRoot === 'function') ? fsaPickRoot : null,
+    fillMesSel: (typeof fillMesSel === 'function') ? fillMesSel : null,
+  };
+
+  /* 兜底：所有关键按钮走事件委托，不受原绑定是否成功影响 */
+  document.addEventListener('click', function (ev) {
+    const el = ev.target && ev.target.closest ? ev.target.closest('button[id^="h3v-"]') : null;
+    if (!el) return;
+    const MAP = {
+      'h3v-charUp': 'uploadChar',
+      'h3v-outfit': 'outfitGen',
+      'h3v-chargen': 'charGen',
+      'h3v-sceneUp': 'uploadScene',
+      'h3v-audUp': 'uploadAudioLib',
+      'h3v-fsaPick': 'fsaPickRoot',
+      'h3v-mesReload': 'fillMesSel',
+    };
+    const fnName = MAP[el.id];
+    if (!fnName) return;
+    const fns = window.H3Fns || {};
+    const fn = fns[fnName];
+    if (typeof fn !== 'function') return;   // 让原绑定去处理
+    ev.preventDefault();
+    ev.stopPropagation();
+    const st = document.getElementById('h3v-status');
+    try {
+      if (st) st.textContent = '已触发：' + (el.textContent || '').trim();
+      fn();
+    } catch (e) {
+      const msg = (el.textContent || '').trim() + ' 出错：' + (e && e.message ? e.message : e);
+      if (st) st.textContent = msg;
+      alert(msg);
+    }
+  }, true);
+
   function boot() {
     try {
       makeFab();
