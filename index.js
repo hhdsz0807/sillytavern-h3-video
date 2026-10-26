@@ -136,6 +136,12 @@
           </select>
         </div>
         <textarea id="h3v-sceneList" rows="4" placeholder="每行一个场景：场景名|英文出图提示词（会自动补 no people / clean background）"></textarea>
+        <div class="row"><label>本地库</label>
+          <label style="width:auto"><input type="checkbox" id="h3v-libOn"> 用电脑硬盘做角色库/场景库</label>
+          <input type="text" id="h3v-libBase" placeholder="http://10.6.22.1:8800" style="flex:1;min-width:180px">
+          <button id="h3v-libTest" style="flex:none">测一下</button>
+        </div>
+        <div class="hint" id="h3v-libState">开启后：上传的图会存到 主机址\&lt;角色卡名&gt;\角色库（或场景库），列表也从硬盘读</div>
         <div class="row"><label>场景库</label>
           <button id="h3v-sceneUp2" style="flex:none">+ 上传场景图</button>
           <span class="hint">可改名、删；名字就是 AI 能选的场景名</span>
@@ -471,6 +477,19 @@
     if ($('#h3v-loadapk2')) $('#h3v-loadapk2').onclick = loadVideosFromApk;
     if ($('#h3v-merge2')) $('#h3v-merge2').onclick = function () { renderOut(); mergeAll(); };
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
+    if ($('#h3v-libOn')) {
+      $('#h3v-libOn').checked = !!S.libOn;
+      $('#h3v-libBase').value = S.libBase || 'http://10.6.22.1:8800';
+      $('#h3v-libOn').onchange = function () { S.libOn = $('#h3v-libOn').checked; saveS(); try { renderCharList(); renderSceneListBox(); } catch (_) {} };
+      $('#h3v-libBase').oninput = function () { S.libBase = $('#h3v-libBase').value.trim(); saveS(); };
+      $('#h3v-libTest').onclick = async function () {
+        try {
+          S.libBase = $('#h3v-libBase').value.trim(); saveS();
+          const items = await libList('chars');
+          status('ok', '本地库通了：' + libBase() + '\n角色卡：' + cardTag() + '，已有 ' + items.length + ' 张');
+        } catch (e) { status('err', '本地库连不上：' + e.message); }
+      };
+    }
     if ($('#h3v-outfit')) $('#h3v-outfit').onclick = outfitGen;
     if ($('#h3v-chargen')) $('#h3v-chargen').onclick = charGen;
     if ($('#h3v-sceneUp2')) $('#h3v-sceneUp2').onclick = uploadScene;
@@ -3288,6 +3307,27 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     } catch (_) {}
   })();
 
+  function libOn() { return !!(S.libOn && String(S.libBase || '').trim()); }
+  function libBase() { return String(S.libBase || '').trim().replace(/\/+$/, ''); }
+
+  async function libList(kind) {
+    const u = libBase() + '/lib/list?card=' + encodeURIComponent(cardTag()) + '&kind=' + kind;
+    const r = await fetch(u);
+    const j = await r.json();
+    return (j && j.items) || [];
+  }
+
+  async function libUpload(kind, name, blob) {
+    const u = libBase() + '/lib/upload?card=' + encodeURIComponent(cardTag()) +
+      '&kind=' + kind + '&name=' + encodeURIComponent(name);
+    const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+    return await r.json();
+  }
+
+  function libUrl(kind, file) {
+    return libBase() + '/lib/file?card=' + encodeURIComponent(cardTag()) + '&kind=' + kind + '&name=' + encodeURIComponent(file);
+  }
+
   function thumbUrl(file) {
     return api('/api/preview?type=input&filename=' + encodeURIComponent(file) + '&t=' + Date.now());
   }
@@ -3328,6 +3368,22 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   function renderCharList() {
+    if (libOn()) {
+      libList('chars').then(function (items) {
+        items.forEach(function (it) {
+          const nm = it.name;
+          if (!CHARLIB.some(function (c) { return c.name === nm || c.file === it.file; })) {
+            CHARLIB.push({ file: it.file, name: nm, libUrl: it.url });
+          }
+        });
+        renderCharListRaw();
+      }).catch(function (e) { LOG('lib list fail', e); renderCharListRaw(); });
+      return;
+    }
+    renderCharListRaw();
+  }
+
+  function renderCharListRaw() {
     const box = $('#h3v-charList');
     if (!box) return;
     const sum = $('#h3v-charSum');
@@ -3585,6 +3641,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           if (j.error) throw new Error(j.error);
           if (CHARLIB.length >= 6) { status('err', '角色库最多 6 张'); break; }
           CHARLIB.push({ file: j.name, name: f.name.replace(/\.[^.]+$/, '') });
+          if (libOn()) { try { await libUpload('chars', f.name, f); } catch (e) { LOG('lib upload fail', e); } }
           try { await IDB.put(j.name, f, 'image'); } catch (_) {}
           saveChars();
           renderCharList();
