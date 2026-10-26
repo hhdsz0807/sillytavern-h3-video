@@ -3318,6 +3318,22 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return (j && j.items) || [];
   }
 
+  async function libDelete(kind, file) {
+    if (!libOn() || !file) return;
+    try {
+      await fetch(libBase() + '/lib/delete?card=' + encodeURIComponent(cardTag()) +
+        '&kind=' + kind + '&name=' + encodeURIComponent(file));
+    } catch (err) { LOG('lib delete fail', err); }
+  }
+
+  async function libRename(kind, from, to) {
+    if (!libOn() || !from || !to) return;
+    try {
+      await fetch(libBase() + '/lib/rename?card=' + encodeURIComponent(cardTag()) +
+        '&kind=' + kind + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
+    } catch (err) { LOG('lib rename fail', err); }
+  }
+
   async function libUpload(kind, name, blob) {
     const u = libBase() + '/lib/upload?card=' + encodeURIComponent(cardTag()) +
       '&kind=' + kind + '&name=' + encodeURIComponent(name);
@@ -3429,11 +3445,25 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     box.innerHTML = html;
     box.querySelectorAll('input[data-cn]').forEach(function (el) {
       const i = Number(el.dataset.cn);
-      el.oninput = function () { CHARLIB[i].name = el.value.trim(); saveChars(); };
+      el.onchange = function () {
+        const old = CHARLIB[i];
+        const nv = el.value.trim();
+        if (!old || !nv || nv === old.name) return;
+        const oldName = old.name;
+        old.name = nv; saveChars();
+        if (libOn() && old.file) { libRename('chars', old.file, nv + (/\./.test(old.file) ? old.file.slice(old.file.lastIndexOf('.')) : '.png')); }
+        status('ok', '已改名：' + oldName + ' → ' + nv);
+      };
     });
     box.querySelectorAll('button[data-cdel]').forEach(function (el) {
       const i = Number(el.dataset.cdel);
-      el.onclick = function () { CHARLIB.splice(i, 1); saveChars(); renderCharList(); };
+      el.onclick = async function () {
+        const c = CHARLIB[i];
+        CHARLIB.splice(i, 1); saveChars();
+        if (c) { try { await libDelete('chars', c.file); } catch (_) {} }
+        renderCharListRaw();
+        status('ok', '已删除' + (c ? '「' + c.name + '」' : ''));
+      };
     });
     fillCharAudioSelects();
   }
@@ -3479,7 +3509,9 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       const i = Number(el.dataset.sdel);
       el.onclick = function () {
         if (!confirm('从场景库删掉「' + (SCENES[i] && SCENES[i].name) + '」？（不会删文件）')) return;
-        SCENES.splice(i, 1); saveScenes(); renderSceneListBox();
+        { const gone = SCENES[i]; SCENES.splice(i, 1); saveScenes();
+          if (gone) { libDelete('scenes', gone.file).catch(function () {}); }
+          renderSceneListBox(); }
       };
     });
   }
@@ -3738,7 +3770,12 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     });
     box.querySelectorAll('button[data-adel]').forEach(function (el) {
       const i = Number(el.dataset.adel);
-      el.onclick = function () { AUDIOLIB.splice(i, 1); saveAudios(); renderAudioLib(); fillCharAudioSelects(); };
+      el.onclick = async function () {
+        const gone = AUDIOLIB[i];
+        AUDIOLIB.splice(i, 1); saveAudios();
+        if (gone) { try { await libDelete('audios', gone.file); } catch (_) {} }
+        renderAudioLib(); fillCharAudioSelects();
+      };
     });
     fillCharAudioSelects();
   }
