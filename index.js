@@ -4663,7 +4663,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         status('run', '第 ' + (i + 1) + ' 段镜头数 ' + cnt + ' 超过上限 ' + maxShot + '，重写一次…');
         try {
           const fixUser = user + '\n\n【上一版不合格】你写了 ' + cnt + ' 个 [Shot]，本段只允许 ' + maxShot + ' 个。请把内容合并成正好 ' + maxShot + ' 个镜头（[Shot 1]' + (maxShot > 1 ? '…[Shot ' + maxShot + ']' : '') + '），每镜至少 4 秒，其余信息压缩进这两个镜头，不要新增镜头。';
-          const out3 = await callAI(SIX_SYS, fixUser, 3000);
+          const out3 = await callAI(SIX_SYS, fixUser, 3000, LANE_PURPOSE);
           const b3 = extractPrompt(out3) || String(out3 || '').trim();
           if (b3) {
             const nb3 = applyVideoStyle(normalizeBlock(b3));
