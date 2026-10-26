@@ -2444,6 +2444,26 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     });
   }
 
+  /* 桥的多端口池：浏览器每个源只开 6 条连接，多端口才能真并发（端口表从 /v1/models 自动探） */
+  let AGENT_POOL = { base: '', urls: [] };
+  async function agentPortUrls(fullUrl) {
+    let base = '';
+    try { base = new URL(fullUrl, location.href).origin; } catch (_) { return []; }
+    if (AGENT_POOL.base === base && AGENT_POOL.urls.length) return AGENT_POOL.urls;
+    let urls = [];
+    try {
+      const r = await withTimeout(fetch(base + '/v1/models'), 4000, '探桥 ');
+      const j = await r.json();
+      const ports = (j && j.h3 && Array.isArray(j.h3.ports)) ? j.h3.ports : [];
+      const path = String(fullUrl).replace(/^https?:\/\/[^/]+/, '') || '';
+      urls = ports.filter(function (p) { return Number(p) > 0; })
+        .map(function (p) { return base.replace(/:\d+$/, '') + ':' + Number(p) + path; });
+    } catch (_) {}
+    if (!urls.length) urls = [fullUrl];
+    AGENT_POOL = { base: base, urls: urls };
+    return urls;
+  }
+
   async function agentHttp(url, bodyStr, method, purpose) {
     const verb = (method || 'POST').toUpperCase();
     const headers = { 'Content-Type': 'application/json' };
@@ -2452,6 +2472,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
     // ① 浏览器直连（3099 带 CORS，最省事、不依赖 H3 APK）
     try {
+      const pool = await agentPortUrls(url);   // 多端口轮流打，绕开「每源 6 连接」
       let r = null, txt = '';
       const waits = [0, 5000, 15000, 30000, 60000];
       for (let attempt = 0; attempt < waits.length; attempt++) {
@@ -2461,9 +2482,10 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         }
         window.__h3ReqSeq = (window.__h3ReqSeq || 0) + 1;
         const __seq = window.__h3ReqSeq;
-        try { console.log('[h3v] → 桥请求 #' + __seq + ' ' + url); } catch (_) {}
+        const target = pool.length > 1 ? pool[(window.__h3RR = (window.__h3RR || 0) + 1) % pool.length] : url;
+        try { console.log('[h3v] → 桥请求 #' + __seq + ' ' + target); } catch (_) {}
         r = await agentGate(function () {
-          return withTimeout(fetch(url, {
+          return withTimeout(fetch(target, {
           method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
         }), 450000, 'Agent ');
         });
