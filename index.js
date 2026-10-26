@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: false, pairSegs: true,
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: false, pairSegs: false,
   orchHost: 'http://127.0.0.1:8800',
   libOn: false, libBase: '', customStyle: '' };
 
@@ -252,7 +252,7 @@
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <label style="min-width:auto">并发</label>
           <input type="number" id="h3v-genConc" min="1" max="16" step="1" value="8" style="max-width:56px;flex:none">
-          <label style="min-width:auto"><input type="checkbox" id="h3v-pairSegs"> 两段一请求（省一半请求）</label>
+          <label style="min-width:auto"><input type="checkbox" id="h3v-pairSegs"> 两段一请求（请求数减半；本机实测更慢，默认关）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-orchMode"> 单请求编排（仅会话模式，默认关）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
@@ -4748,7 +4748,17 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
           status('err', '第 ' + (i + 1) + '/' + (j + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120));
         }
         LAST_SEG_OUT = String(out || '').slice(0, 400);
-        const got = splitBlocks(out);
+        let got = splitBlocks(out);
+        const lackPic = function (t) { return !t || !/<Picture\s*\d/i.test(t); };
+        if (lackPic(got[0]) || lackPic(got[1])) {
+          // 一次整对重试（比拆成两次单段便宜）
+          try {
+            const retryUser = user + '\n\n注意：上一版有块没写 <Picture N> 编号。本次两个块都必须在 subject_definitions 里给角色/场景标注 <Picture N>。';
+            const out2 = await callAI(SIX_SYS, retryUser, 7000, lane);
+            const got2 = splitBlocks(out2);
+            if (got2.length >= 2 && !lackPic(got2[0]) && !lackPic(got2[1])) got = got2;
+          } catch (e) { LOG('pair picture retry fail', i, e); }
+        }
         const parts = [{ k: i, sec: secA, txt: got[0] || '' }, { k: j, sec: secB, txt: got[1] || '' }];
         for (let t = 0; t < parts.length; t++) {
           const p = parts[t];
