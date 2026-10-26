@@ -66,3 +66,73 @@
   background: #000; border: 1px solid #26303c; border-radius: 8px;
   margin: 0 0 10px 0;
 }
+
+/* ===== v0.4 可读性增强（追加覆盖，放最后生效） ===== */
+#h3v-dlg {
+  font-size: 14px !important;
+  color: #eef3f9 !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+#h3v-dlg label {
+  color: #b6c5d8 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+#h3v-dlg .hint {
+  color: #a1b4ca !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+}
+
+#h3v-dlg input[type=text],
+#h3v-dlg input[type=number],
+#h3v-dlg select,
+#h3v-dlg textarea {
+  background: #1b222c !important;
+  color: #f3f7fc !important;
+  border: 1px solid #3a4a60 !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+}
+
+#h3v-dlg textarea {
+  font-size: 13.5px !important;
+  line-height: 1.7 !important;
+  color: #f3f7fc !important;
+  letter-spacing: .2px;
+}
+
+#h3v-dlg input::placeholder,
+#h3v-dlg textarea::placeholder {
+  color: #93a7bf !important;
+  opacity: 1 !important;
+}
+
+#h3v-dlg select option {
+  background: #1b222c !important;
+  color: #f3f7fc !important;
+}
+
+#h3v-status {
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+  color: #dfe9f6 !important;
+}
+
+#h3v-dlg .prog,
+#h3v-dlg .pct,
+#h3v-dlg .sum,
+#h3v-dlg .tag {
+  color: #d3dfee !important;
+  font-size: 12.5px !important;
+}
+
+/* 下拉里“当前角色卡”等灰字再亮一点 */
+#h3v-dlg .mono,
+#h3v-dlg code,
+#h3v-dlg .dim {
+  color: #c2d0e2 !important;
+}
+
