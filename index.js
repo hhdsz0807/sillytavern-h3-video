@@ -2464,6 +2464,11 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       return j;
     } catch (e1) {
       // ② 退回 H3 APK 转发（H3 没开时会失败，正常）
+      const __msg = String((e1 && e1.message) || e1);
+      try { console.error('[h3v] 直连失败：' + __msg); } catch (_) {}
+      if (/127\.0\.0\.1|localhost/.test(String(url)) && !/8899/.test(String(url))) {
+        throw new Error('本机 Agent 直连失败：' + __msg + '（确认 3099 在跑）');
+      }
       const r = await withTimeout(fetch(api('/api/fetch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
