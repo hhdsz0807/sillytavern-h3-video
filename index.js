@@ -481,7 +481,7 @@
     if ($('#h3v-charUp')) $('#h3v-charUp').onclick = uploadChar;
     if ($('#h3v-libOn')) {
       $('#h3v-libOn').checked = !!S.libOn;
-      $('#h3v-libBase').value = S.libBase || 'http://10.6.22.1:8800';
+      $('#h3v-libBase').value = S.libBase || (location.port === '8000' ? 'http://127.0.0.1:8800' : 'http://127.0.0.1:8899');
       $('#h3v-libOn').onchange = function () { S.libOn = $('#h3v-libOn').checked; saveS(); try { renderCharList(); renderSceneListBox(); } catch (_) {} };
       $('#h3v-libBase').oninput = function () { S.libBase = $('#h3v-libBase').value.trim(); saveS(); };
       $('#h3v-libTest').onclick = async function () {
