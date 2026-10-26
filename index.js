@@ -4446,6 +4446,8 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
       let nextI = 0, doneI = 0;
 
       async function genOne(i) {
+    // 每个并发走独立会话泳道，避免全部排进同一个 DSH 会话
+    window.__h3Purpose = 'plan#' + ((i % (typeof GENCONC === 'number' && GENCONC > 0 ? GENCONC : 1)) + 1);
         const seg = plan.segs[i];
         const sec = Math.min(15, Math.max(3, Math.round((seg.to - seg.from) * 2) / 2));
         const prevBlock = i > 0 ? blocksArr[i - 1] : null;
