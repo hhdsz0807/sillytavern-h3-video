@@ -199,7 +199,12 @@
         </div>
         <textarea id="h3v-sceneList" rows="4" placeholder="每行一个场景：场景名|英文出图提示词（会自动补 no people / clean background）"></textarea>
         <div class="row"><label>本地库</label>
-          <label style="width:auto"><input type="checkbox" id="h3v-libOn"> 用电脑硬盘做角色库/场景库</label>
+          <label style="width:auto"><input type="checkbox" id="h3v-libOn"> 用硬盘做角色库/场景库</label>
+          <select id="h3v-libMode" style="max-width:150px">
+            <option value="fsa">选文件夹（不用端口）</option>
+            <option value="server">服务地址（有端口）</option>
+          </select>
+          <button id="h3v-fsaPick" class="sm" style="flex:none">选择文件夹</button>
           <input type="text" id="h3v-libBase" placeholder="http://10.6.22.1:8800" style="flex:1;min-width:180px">
           <button id="h3v-libTest" style="flex:none">测一下</button>
         </div>
@@ -553,10 +558,21 @@
       $('#h3v-libOn').checked = !!S.libOn;
       $('#h3v-libBase').value = S.libBase || (location.port === '8000' ? 'http://127.0.0.1:8800' : 'http://127.0.0.1:8899');
       $('#h3v-libOn').onchange = function () { S.libOn = $('#h3v-libOn').checked; saveS(); try { renderCharList(); renderSceneListBox(); } catch (_) {} };
+      if ($('#h3v-libMode')) {
+        $('#h3v-libMode').value = S.libMode || 'fsa';
+        $('#h3v-libMode').onchange = function () { S.libMode = $('#h3v-libMode').value; saveS(); };
+      }
+      if ($('#h3v-fsaPick')) {
+        $('#h3v-fsaPick').onclick = async function () {
+          try { await fsaPickRoot(); S.libOn = true; if ($('#h3v-libOn')) $('#h3v-libOn').checked = true; renderCharList(); renderSceneListBox(); }
+          catch (e) { status('err', '选文件夹失败：' + e.message); }
+        };
+      }
       $('#h3v-libBase').oninput = function () { S.libBase = $('#h3v-libBase').value.trim(); saveS(); };
       $('#h3v-libTest').onclick = async function () {
         try {
           S.libBase = $('#h3v-libBase').value.trim(); saveS();
+          if (S.libMode === 'fsa') { const h = await fsaEnsure(true); if (!h) throw new Error('还没绑定文件夹'); const items = await fsaListItems('chars'); status('ok', '已绑定文件夹：' + h.name + '\n角色库 ' + items.length + ' 张'); return; }
           const items = await libList('chars');
           status('ok', '本地库通了：' + libBase() + '\n角色卡：' + cardTag() + '，已有 ' + items.length + ' 张');
         } catch (e) { status('err', '本地库连不上：' + e.message); }
@@ -3381,10 +3397,149 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     } catch (_) {}
   })();
 
-  function libOn() { return !!(S.libOn && String(S.libBase || '').trim()); }
+  function libOn() { return !!(S.libOn && (S.libMode === 'fsa' || String(S.libBase || '').trim())); }
   function libBase() { return String(S.libBase || '').trim().replace(/\/+$/, ''); }
 
+  /* ---------- 文件系统直连（File System Access API，Chrome/Edge 桌面） ---------- */
+  let FSA_ROOT = null;
+  const FSA_URLS = {};
+
+  function fsaSupported() { return typeof window.showDirectoryPicker === 'function'; }
+
+  function fsaDb() {
+    return new Promise(function (resolve, reject) {
+      const rq = indexedDB.open('h3v-fsa', 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore('h', { keyPath: 'k' }); };
+      rq.onsuccess = function () { resolve(rq.result); };
+      rq.onerror = function () { reject(rq.error); };
+    });
+  }
+
+  async function fsaSave(handle) {
+    try {
+      const db = await fsaDb();
+      await new Promise(function (res, rej) {
+        const tx = db.transaction('h', 'readwrite');
+        tx.objectStore('h').put({ k: 'root', v: handle });
+        tx.oncomplete = res; tx.onerror = function () { rej(tx.error); };
+      });
+    } catch (e) { LOG('fsa save fail', e); }
+  }
+
+  async function fsaLoad() {
+    try {
+      const db = await fsaDb();
+      return await new Promise(function (res, rej) {
+        const tx = db.transaction('h', 'readonly');
+        const rq = tx.objectStore('h').get('root');
+        rq.onsuccess = function () { res(rq.result && rq.result.v || null); };
+        rq.onerror = function () { rej(rq.error); };
+      });
+    } catch (e) { return null; }
+  }
+
+  async function fsaEnsure(interactive) {
+    if (FSA_ROOT) {
+      const st = await FSA_ROOT.queryPermission({ mode: 'readwrite' });
+      if (st === 'granted') return FSA_ROOT;
+      if (interactive) {
+        const r = await FSA_ROOT.requestPermission({ mode: 'readwrite' });
+        if (r === 'granted') return FSA_ROOT;
+      }
+      return null;
+    }
+    const saved = await fsaLoad();
+    if (saved) {
+      FSA_ROOT = saved;
+      const st = await saved.queryPermission({ mode: 'readwrite' });
+      if (st === 'granted') return saved;
+      if (interactive) {
+        const r = await saved.requestPermission({ mode: 'readwrite' });
+        if (r === 'granted') return saved;
+      }
+    }
+    return null;
+  }
+
+  async function fsaPickRoot() {
+    if (!fsaSupported()) { status('err', '这个浏览器不支持选文件夹（要用 Chrome/Edge 桌面版）'); return null; }
+    const h = await window.showDirectoryPicker({ mode: 'readwrite', id: 'h3v-lib' });
+    FSA_ROOT = h;
+    await fsaSave(h);
+    S.libMode = 'fsa'; saveS();
+    status('ok', '已绑定文件夹：' + h.name + '（会在这里建 角色库/场景库/音频库）');
+    return h;
+  }
+
+  function fsaKindDirName(kind) {
+    return kind === 'scenes' ? '场景库' : (kind === 'audios' ? '音频库' : '角色库');
+  }
+
+  async function fsaDir(kind, create) {
+    const root = await fsaEnsure(false);
+    if (!root) return null;
+    try {
+      return await root.getDirectoryHandle(fsaKindDirName(kind), { create: !!create });
+    } catch (e) {
+      if (!create) return null;
+      throw e;
+    }
+  }
+
+  async function fsaListItems(kind) {
+    const dir = await fsaDir(kind, false);
+    if (!dir) return [];
+    const out = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      if (!/\.(png|jpe?g|webp|mp3|wav|m4a|ogg|flac)$/i.test(name)) continue;
+      let url = FSA_URLS[kind + '/' + name];
+      if (!url) {
+        try {
+          const f = await handle.getFile();
+          url = URL.createObjectURL(f);
+          FSA_URLS[kind + '/' + name] = url;
+        } catch (e) { url = ''; }
+      }
+      out.push({ name: name.replace(/\.[^.]+$/, ''), file: name, url: url });
+    }
+    return out;
+  }
+
+  async function fsaWrite(kind, name, blob) {
+    const dir = await fsaDir(kind, true);
+    if (!dir) throw new Error('没绑定文件夹（先点「选择文件夹」）');
+    const fh = await dir.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(blob);
+    await w.close();
+    try {
+      URL.revokeObjectURL(FSA_URLS[kind + '/' + name] || '');
+      FSA_URLS[kind + '/' + name] = URL.createObjectURL(blob);
+    } catch (e) {}
+  }
+
+  async function fsaRemove(kind, name) {
+    const dir = await fsaDir(kind, false);
+    if (!dir) return;
+    try { await dir.removeEntry(name); } catch (e) { LOG('fsa remove fail', e); }
+  }
+
+  async function fsaRename(kind, from, to) {
+    const dir = await fsaDir(kind, false);
+    if (!dir) return;
+    try {
+      const src = await dir.getFileHandle(from);
+      const f = await src.getFile();
+      const ext = (from.match(/\.[^.]+$/) || [''])[0];
+      const target = /\./.test(to) ? to : to + ext;
+      await fsaWrite(kind, target, f);
+      await dir.removeEntry(from);
+    } catch (e) { LOG('fsa rename fail', e); }
+  }
+
   async function libList(kind) {
+    if (S.libMode === 'fsa') return await fsaListItems(kind);
     const u = libBase() + '/lib/list?card=' + encodeURIComponent(cardTag()) + '&kind=' + kind;
     const r = await fetch(u);
     const j = await r.json();
@@ -3392,6 +3547,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function libDelete(kind, file) {
+    if (S.libMode === 'fsa') { await fsaRemove(kind, file); return; }
     if (!libOn() || !file) return;
     try {
       await fetch(libBase() + '/lib/delete?card=' + encodeURIComponent(cardTag()) +
@@ -3400,6 +3556,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function libRename(kind, from, to) {
+    if (S.libMode === 'fsa') { await fsaRename(kind, from, to); return; }
     if (!libOn() || !from || !to) return;
     try {
       await fetch(libBase() + '/lib/rename?card=' + encodeURIComponent(cardTag()) +
@@ -3408,6 +3565,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function libUpload(kind, name, blob) {
+    if (S.libMode === 'fsa') { await fsaWrite(kind, name, blob); return { ok: true, file: name }; }
     const u = libBase() + '/lib/upload?card=' + encodeURIComponent(cardTag()) +
       '&kind=' + kind + '&name=' + encodeURIComponent(name);
     const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
