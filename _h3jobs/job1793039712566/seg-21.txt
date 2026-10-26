@@ -1,0 +1,25 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A quiet twelve-second two-shot segment inside <Subject 2>, staying entirely with <Subject 1> as his hands finish polishing the last chapter on the glowing phone while the afternoon light visibly turns westward, then lifting to his face as his thumb presses the final publish button and the backend word count rolls past one hundred thousand; a single fictional character alone in the frame, no second person, no split screen, no lettering beyond the phone's own interface, hand assignments locked to the right thumb scrolling and pressing with the left thumb only nudging punctuation.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose plain white T-shirt and soft gray shorts, barefoot, with the right thumb keeping the same scrolling and publishing task from the hand close-up into the facial view.
+<Subject 2> (appears in [Shot 1], [Shot 2]): partially_preserved - the rush-grass tatami, the blind-slat sunlight and the warming, darkening corners of the room hold their positions, while [Shot 2] frames mostly his face and the tilted screen with only a thin slice of the room behind him.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+[Shot 1] A tight two-handed close-up in <Picture 2>: the phone is cradled above the rush-grass tatami, the screen a pale cold slab lighting the undersides of both thumbs, his knees and one bare heel just visible at the frame edge. The right thumb drags the page down in small deliberate increments while the left thumb taps into the text to widen a blank line, then nudges a comma and a closing quote back into place; the two hands keep their assignments the whole time. Around them the room has quietly moved on: the hard ladder of blind-slat sunlight that lay across the mat has slid visibly westward, thinner and more orange now, and the corners warmed into deepening brown shadow. He exhales through his nose and shifts his weight, the tatami giving a dry rustle under him, and his thumb never stops its small rhythm. The camera holds, drifting a few centimeters closer as the page settles. Dry plastic ticks, a thumb whispering over glass, the low creak of the old floor, a faint electronic hum from the handset, and his slow breathing near the microphone.
+[Shot 2] At 00:05.500, the shot begins from <Picture 1> as the camera rises and tilts to a close three-quarter view of his face with the phone screen angled up beneath his chin. His right thumb comes down on the publish button at the end of the final chapter; the button dims under the pressure, a thin ring draws itself once around it and closes, and the small confirmation line resolves. The phone trembles slightly in his grip as the ring completes. He does not move at first, then his shoulders sink as he lets a long breath out through his nose, eyes shutting for a beat, and he wipes his palm on the gray shorts and lets the phone rest against his chest. On the screen the author dashboard rolls its total word count up past one hundred thousand characters and stops, its glow fading from cold white to a dimmer blue. The late light has gone amber on his cheek and the scratched bezel. The camera eases back a hand's width and holds on his slack posture. A single soft electronic chime, the click of the button, the long exhale, and the room's dry quiet returning.
+
+overall_soundscape:
+Room tone of a small wooden second-floor apartment late in the afternoon: faint street noise and a distant bicycle bell through the window glass, the low creak of old floorboards under shifting weight, a dry plastic tick of a thumb against the phone bezel, the whisper of a fingertip dragging over smeared glass, one soft electronic chime from the handset, and a long nasal exhale close to the microphone.
+
+non_diegetic_music:
+Sparse solo piano at about 60 BPM, low dynamics, single notes left to ring in a long reverb, no percussion or strings, settling on one sustained low note as the breath ends.
+[[/H3]]

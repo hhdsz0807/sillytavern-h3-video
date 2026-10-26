@@ -2450,7 +2450,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         r = await agentGate(function () {
           return withTimeout(fetch(url, {
           method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
-        }), 180000, 'Agent ');
+        }), 300000, 'Agent ');
         });
         txt = await r.text();
         const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);

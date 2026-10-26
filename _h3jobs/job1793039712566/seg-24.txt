@@ -1,0 +1,25 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A quiet twelve-second two-shot segment in <Subject 2> in which <Subject 1>, alone, lowers his old phone onto his chest and looks up at the stained ceiling, then sinks back against the wall and rubs his tired eyes until a very faint smile appears; one single fictional character only, no second person, no duplicate of him, no split screen, no on-screen subtitles or watermarks beyond the phone UI already handled elsewhere, hand task locked so the right hand only holds the phone against his chest while the left hand does all the rubbing, with no hand ever switching roles.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose plain white T-shirt and soft gray shorts, barefoot with no socks, with the right hand keeping the phone pinned to his chest and the left hand rising to his eyes, carried unbroken across the cut.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the yellowed damp-stained ceiling, woven rush-grass tatami, mottled plaster wall, folded futon and the long orange blind-slat bars stay legible in both shots, with the room simply wrapping closer around him in the second.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+[Shot 1] The shot begins in <Picture 2> at a low angle beside the folded futon, the woven rush grass filling the bottom of frame, as <Subject 1> lowers the old phone from his face and lets it rest flat against his chest, his right hand keeping it pinned there with the thumb still hooked over the scuffed bezel. His chin lifts and his gaze climbs the damp-stained wall to the yellowed ceiling; the blind slats throw long orange bars across the tatami, stretched further than a moment ago, one band crossing his bare shin and the pale gray of his shorts. His shoulders drop, his head tips back until the brown water stain sits almost directly above his eyes, and the wind outside makes the bars slide and breathe. Dust turns slowly in the warm shaft. The camera cranes up from the phone on his chest to his upturned profile, then settles and holds his face and the stained ceiling in one unhurried composition, while his breathing lengthens and his lips part a little.
+[Shot 2] At 00:05.500, the shot begins from <Picture 1> as he lets himself slide down against the mottled wall of <Picture 2>, the phone settling on the tatami beside his hip, and raises his left hand to rub his aching eyes, the heel of his palm grinding once across the lids before the fingertips press into both sockets and stay there for a single full beat. His shoulders loosen, the tendons in his thin wrist ease, and when the hand falls away his eyes are wet at the corners and heavy-lidded, fixed on nothing. A shallow, almost invisible smile pulls at one corner of his mouth and stays. The camera eases in a couple of hand-widths, holding his face at three-quarter view against the stained plaster, the long orange slats lying across his cheek and the wall behind him. <Subject 1> (S1, off-screen voice-over) says, <d>[Chinese] 在这个大部分网络作者日更两三千字都算勤奋的年代，开书首日直接甩出十万字完整一卷外加新卷开头的做法，跟拿着消防水枪往池塘里灌水差不多。</d> Warm light deepens, dust drifting through the beam, the room's shadows softening as the bars creep further up the tatami.
+
+overall_soundscape:
+Late-afternoon room tone of a small wooden second-floor apartment: muffled street traffic beyond the window glass, a faint insect hum, the soft thump of the phone settling on straw matting, the dry rustle of a cotton sleeve and the slight tacky sound of a palm rubbed over tired eyelids, a long exhaled breath, and a quiet settling creak from the old floorboards and wall framing.
+
+non_diegetic_music:
+Sparse solo piano at about 60 BPM, low dynamics, single notes left to ring in a long reverb, no percussion or strings, fading to one sustained note under the final shallow smile.
+[[/H3]]
