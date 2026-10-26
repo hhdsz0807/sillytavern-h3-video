@@ -39,6 +39,43 @@
     'max-width:none;max-height:none;background:#121820;color:#dfe7f0;z-index:2147483000;' +
     'flex-direction:column;overflow:hidden;display:none;';
 
+  function fillMesSel(keepSel) {
+    const sel = document.getElementById('h3v-mesSel');
+    const info = document.getElementById('h3v-mesInfo');
+    if (!sel) return;
+    const list = Array.from(document.querySelectorAll('#chat .mes'));
+    const keep = keepSel || sel.value;
+    sel.innerHTML = '';
+    const start = Math.max(0, list.length - 40);
+    for (let i = start; i < list.length; i++) {
+      const el = list[i];
+      const id = el.getAttribute('mesid') || el.dataset.mesid || String(i);
+      const isUser = el.classList.contains('user_mes') || el.getAttribute('is_user') === 'true';
+      const tx = (el.querySelector('.mes_text') || el).innerText || '';
+      const snip = tx.replace(/\s+/g, ' ').trim().slice(0, 28);
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = '#' + id + (isUser ? ' 我：' : ' AI：') + snip;
+      sel.appendChild(o);
+    }
+    if (keep && Array.from(sel.options).some(function (o) { return o.value === keep; })) sel.value = keep;
+    else if (list.length) sel.value = (list[list.length - 1].getAttribute('mesid') || String(list.length - 1));
+    pickMes();
+    if (info) info.textContent = '共 ' + list.length + ' 层';
+
+    function pickMes() {
+      const el = Array.from(document.querySelectorAll('#chat .mes')).filter(function (m) {
+        return (m.getAttribute('mesid') || m.dataset.mesid || '') === sel.value;
+      })[0];
+      if (!el) return;
+      const tx = (el.querySelector('.mes_text') || el).innerText || '';
+      CURTEXT = tx;
+      CURMESID = sel.value;
+      if (info) info.textContent = '已选 #' + sel.value + ' · ' + tx.length + ' 字';
+    }
+    sel.onchange = pickMes;
+  }
+
   function makeFab() {
     const old = document.getElementById('h3v-fab');
     if (old && old.parentNode) old.parentNode.removeChild(old);
@@ -350,6 +387,8 @@
       $('#h3v-agentPath').onchange = function () { S.agentPath = $('#h3v-agentPath').value.trim() || '/v1/chat/completions'; saveS(); };
     }
     if ($('#h3v-agentProbe')) $('#h3v-agentProbe').onclick = agentProbe;
+    if ($('#h3v-mesReload')) $('#h3v-mesReload').onclick = function () { fillMesSel(); };
+    try { fillMesSel(); } catch (_) {}
     if ($('#h3v-agentProv')) $('#h3v-agentProv').onclick = agentProvision;
     if ($('#h3v-presetSel')) {
       renderPresetSel();
