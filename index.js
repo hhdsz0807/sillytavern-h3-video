@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: (location.port === '8000' ? 'http://10.6.22.6:8899' : 'http://127.0.0.1:8899'), seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 3, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'st', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: '', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 3, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'st', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: '', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
 
   let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
