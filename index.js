@@ -243,7 +243,7 @@
           </select>
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <label style="min-width:auto">并发</label>
-          <input type="number" id="h3v-genConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none">
+          <input type="number" id="h3v-genConc" min="1" max="16" step="1" value="8" style="max-width:56px;flex:none">
           <label style="min-width:auto"><input type="checkbox" id="h3v-orchMode"> 单请求编排（会话内开子代理）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
