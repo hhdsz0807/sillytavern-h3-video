@@ -935,9 +935,15 @@
       if (a && audios.length < 3 && audios.indexOf(a) < 0) audios.push(a);
     });
 
+    // 硬盘三库是裸文件名，服务端 input 里没有 → 提交前先传一份进去（同名只传一次）
+    const relImages = [];
+    for (let k = 0; k < images.length; k++) relImages.push(await stageName(images[k], 'image'));
+    const relAudios = [];
+    for (let k = 0; k < audios.length; k++) relAudios.push(await stageName(audios[k], 'audio'));
+
     const j = await jpost('/api/mm/run', {
-      images: images,
-      audios: audios,
+      images: relImages,
+      audios: relAudios,
       prompt: text,
       seconds: seconds,
       megapixels: Number($('#h3v-mp').value) || 0.98,
@@ -3789,6 +3795,42 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
   function libUrl(kind, file) {
     return libBase() + '/lib/file?card=' + encodeURIComponent(cardTag()) + '&kind=' + kind + '&name=' + encodeURIComponent(file);
+  }
+
+  /* 硬盘三库给的是裸文件名（如「白井玄一校服.jpg」），服务端 input 里只有 ui_xxx 名。
+     提交前把库文件真正传一份进 input，否则 /api/mm/run 会报「素材不存在」。 */
+  const STAGED = {};
+  function libEntryOf(name) {
+    const pools = [];
+    try { if (typeof CHARLIB !== 'undefined' && CHARLIB) pools.push.apply(pools, CHARLIB); } catch (_) {}
+    try { if (typeof SCENES !== 'undefined' && SCENES) pools.push.apply(pools, SCENES); } catch (_) {}
+    try { if (typeof AUDIOLIB !== 'undefined' && AUDIOLIB) pools.push.apply(pools, AUDIOLIB); } catch (_) {}
+    for (let i = 0; i < pools.length; i++) if (pools[i] && pools[i].file === name) return pools[i];
+    return null;
+  }
+  async function stageName(name, kind) {
+    if (!name) return '';
+    if (STAGED[name]) return STAGED[name];
+    const e = libEntryOf(name);
+    if (!e || !e.libUrl) return name;          // 已经是服务端在册的名字（ui_…）直接过
+    try {
+      const r = await withTimeout(fetch(e.libUrl), 30000, '取库文件 ');
+      if (!r.ok) throw new Error('库文件 HTTP ' + r.status);
+      const blob = await r.blob();
+      const up = await withTimeout(fetch(api('/api/upload?kind=' + kind + '&name=' + encodeURIComponent(name)), {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob,
+      }), 60000, '传库文件 ');
+      const j = await up.json();
+      if (!j || !j.name) throw new Error('上传返回没名字：' + JSON.stringify(j).slice(0, 100));
+      STAGED[name] = j.name;
+      LOG('staged', name, '→', j.name);
+      return j.name;
+    } catch (err) {
+      LOG('stage fail', name, err);
+      return name;                             // 退回原名，让服务端报明确错误
+    }
   }
 
   async function libSyncScenes() {
