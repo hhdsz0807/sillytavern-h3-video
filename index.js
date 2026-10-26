@@ -73,7 +73,7 @@
         <div class="row"><label>H3 地址</label>
           <input type="text" id="h3v-host" value="${esc(S.host)}" placeholder="http://127.0.0.1:8899">
           <button id="h3v-ping">测试连接</button>
-          <button id="h3v-diag">诊断</button>
+          <button id="h3v-autoHost">自动找 H3</button>
         </div>
 
         <div class="row" style="display:none"><label>四视图</label></div>
@@ -305,6 +305,7 @@
     $('#h3v-x2').onclick = closePanel;
     $('#h3v-host').onchange = () => { S.host = ($('#h3v-host').value || DEFA.host).trim().replace(/\/+$/, ''); saveS(); pingNow(); };
     $('#h3v-ping').onclick = pingNow;
+    if ($('#h3v-autoHost')) $('#h3v-autoHost').onclick = autoFindHost;
     $('#h3v-diag').onclick = () => {
       const u = api('/api/mm/meta');
       try { window.open(u, '_blank'); } catch (_) {}
@@ -3371,6 +3372,29 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       });
       if (added) { renderAudioLib(); fillCharAudioSelects(); }
     } catch (e) { LOG('lib audios fail', e); }
+  }
+
+  async function autoFindHost() {
+    const cur = String(S.host || '').trim();
+    const cands = [];
+    if (cur) cands.push(cur.replace(/\/+$/, ''));
+    ['http://127.0.0.1:8899', 'http://10.6.22.6:8899', 'http://10.6.22.1:8899', 'http://localhost:8899']
+      .forEach(function (c) { if (cands.indexOf(c) < 0) cands.push(c); });
+    status('run', '自动找 H3工作台（手机或本机）…');
+    for (let i = 0; i < cands.length; i++) {
+      const base = cands[i];
+      try {
+        const r = await withTimeout(fetch(base + '/api/mm/meta'), 4000, '探测 ' + base);
+        if (r.ok) {
+          const j = await r.json();
+          S.host = base; saveS();
+          const el = $('#h3v-host'); if (el) el.value = base;
+          status('ok', '找到 H3：' + base + '（可用图 ' + ((j.images || []).length || 0) + ' 张）');
+          return;
+        }
+      } catch (e) { LOG('probe fail', base, e); }
+    }
+    status('err', '没找到 H3工作台。手机端要开 App，本机要开 8899；也可手动填 http://10.6.22.6:8899');
   }
 
   function thumbUrl(file) {
