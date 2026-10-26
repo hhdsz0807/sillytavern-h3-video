@@ -205,6 +205,7 @@
             <option value="server">服务地址（有端口）</option>
           </select>
           <button id="h3v-fsaPick" class="sm" style="flex:none">选择文件夹</button>
+          <button id="h3v-fsaRestore" class="sm" style="flex:none">恢复访问</button>
           <input type="text" id="h3v-libBase" placeholder="http://10.6.22.1:8800" style="flex:1;min-width:180px">
           <button id="h3v-libTest" style="flex:none">测一下</button>
         </div>
@@ -562,7 +563,11 @@
         $('#h3v-libMode').value = S.libMode || 'fsa';
         $('#h3v-libMode').onchange = function () { S.libMode = $('#h3v-libMode').value; saveS(); };
       }
-      if ($('#h3v-fsaPick')) {
+      if ($('#h3v-fsaRestore')) $('#h3v-fsaRestore').onclick = fsaRestore;
+    try {
+      if (S.libMode === 'fsa' && S.libOn) fsaTryRestore().then(function (h) { if (h) { try { renderCharList(); renderSceneListBox(); } catch (_) {} } });
+    } catch (_) {}
+    if ($('#h3v-fsaPick')) {
         $('#h3v-fsaPick').onclick = async function () {
           try {
             status('run', '点击已收到，准备选文件夹…');
@@ -3474,6 +3479,40 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return null;
   }
 
+  /* 刷新后自动恢复（不需要用户操作，只要能读到 granted 就直接用） */
+  async function fsaTryRestore() {
+    try {
+      const h = await fsaLoad();
+      if (!h) return null;
+      const st = await h.queryPermission({ mode: 'readwrite' });
+      if (st === 'granted') {
+        FSA_ROOT = h;
+        return h;
+      }
+    } catch (e) { LOG('fsa try restore fail', e); }
+    return null;
+  }
+
+  /* 一次点击恢复（只弹权限确认，不再让你重新挑目录） */
+  async function fsaRestore() {
+    try {
+      const h = await fsaLoad();
+      if (!h) { status('err', '没有记录，点「选择文件夹」选一次'); return null; }
+      const r = await h.requestPermission({ mode: 'readwrite' });
+      if (r === 'granted') {
+        FSA_ROOT = h;
+        S.libMode = 'fsa';
+        S.libOn = true;
+        saveS();
+        try { renderCharList(); renderSceneListBox(); } catch (_) {}
+        status('ok', '已恢复对「' + h.name + '」的访问');
+        return h;
+      }
+      status('err', '恢复失败：请点「选择文件夹」重新选一次');
+    } catch (e) { status('err', '恢复出错：' + e.message); }
+    return null;
+  }
+
   async function fsaPickRoot() {
     if (!fsaSupported()) {
       alert('这个浏览器不支持「选择文件夹」\n\n需要 Chrome / Edge 桌面版（Firefox、手机浏览器都不行）。\n可以先用「服务地址」模式：http://127.0.0.1:8800');
@@ -4591,6 +4630,7 @@ non_diegetic_music:
     uploadScene: (typeof uploadScene === 'function') ? uploadScene : null,
     uploadAudioLib: (typeof uploadAudioLib === 'function') ? uploadAudioLib : null,
     fsaPickRoot: (typeof fsaPickRoot === 'function') ? fsaPickRoot : null,
+    fsaRestore: (typeof fsaRestore === 'function') ? fsaRestore : null,
     fillMesSel: (typeof fillMesSel === 'function') ? fillMesSel : null,
     genSix: (typeof genSix === 'function') ? genSix : null,
     scenePlan: (typeof scenePlan === 'function') ? scenePlan : null,
@@ -4615,6 +4655,7 @@ non_diegetic_music:
       'h3v-sceneUp': 'uploadScene',
       'h3v-audUp': 'uploadAudioLib',
       'h3v-fsaPick': 'fsaPickRoot',
+      'h3v-fsaRestore': 'fsaRestore',
       'h3v-mesReload': 'fillMesSel',
       'h3v-gen': 'genSix',
       'h3v-scenePlan': 'scenePlan',
