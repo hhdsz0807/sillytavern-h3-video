@@ -3091,12 +3091,15 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   function waitKrea2(taskId) {
     return new Promise(function (resolve, reject) {
       const t0 = Date.now();
+      let miss = 0;
       const timer = setInterval(async function () {
         try {
           const j = await jget('/api/krea2/history');
           const job = (j.jobs || []).find(function (x) { return x.taskId === taskId; });
           if (job && job.state === 'done' && job.files && job.files.length) { clearInterval(timer); resolve(job.files[0]); return; }
           if (job && job.state === 'error') { clearInterval(timer); reject(new Error(job.error || 'Krea2 失败')); return; }
+          if (!job) { miss++; if (miss >= 12) { clearInterval(timer); reject(new Error('Krea2 任务丢失（服务重启过？）')); return; } }
+          else { miss = 0; status('run', '出图生成中… 已等 ' + Math.round((Date.now() - t0) / 1000) + ' 秒'); }
           if (Date.now() - t0 > 600000) { clearInterval(timer); reject(new Error('Krea2 超时')); }
         } catch (e) { /* 抖动继续 */ }
       }, 5000);
