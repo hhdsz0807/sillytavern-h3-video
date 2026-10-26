@@ -4591,24 +4591,27 @@ window.__h3Purpose = 'plan';
     btn.disabled = true;
     const t0 = Date.now();
     try {
-      status('run', '① 先估时长 / 排分镜…');
+      status('run', '① 规划 + 造型 并行开跑…');
       pgSet(10);
       const assets = buildAssetList();
-      const planTxt = await callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""\n\n' + assets.text, 2000);
+      // 规划不依赖造型，两条线并行：plan ∥ (cast → artplan)，前置从 74s 压到 ~40s
+      const planP = callAI(PLAN_SYS, '正文：\n"""\n' + text + '\n"""\n\n' + assets.text, 2000, 'plan');
+      const castP = callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200, 'art')
+        .then(function (x) { return String(x || '').trim(); })
+        .catch(function (e) { LOG('cast fail', e); return ''; });
+      const artPlanP = castP.then(function (c) {
+        if (!c) return '';
+        return callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""\n\n已提取的角色设定：\n' + c + '\n\n请在此基础上给出造型规划：每个角色在全片中的服装与状态变化顺序，以及需要几张造型参考图。', 900, 'artplan')
+          .then(function (x) { return String(x || '').trim(); })
+          .catch(function (e) { LOG('artplan fail', e); return ''; });
+      });
+      const planTxt = await planP;
       const plan = parsePlan(planTxt);
-      status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；锁定角色外观…');
+      status('run', '规划：总时长约 ' + plan.total + ' 秒，分 ' + plan.segs.length + ' 段；造型还在同步跑…');
       pgSet(20);
-let castText = '';
-try {
-window.__h3Purpose = 'art';
-castText = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""', 1200)).trim();
-} catch (e) { LOG('cast fail', e); }
-let artPlan = '';
-try {
-window.__h3Purpose = 'artplan';
-artPlan = String(await callAI(CAST_SYS, '正文：\n"""\n' + text + '\n"""\n\n已提取的角色设定：\n' + (castText || '(无)') + '\n\n请在此基础上给出造型规划：每个角色在全片中的服装与状态变化顺序，以及需要几张造型参考图。', 900)).trim();
-} catch (e) { LOG('artplan fail', e); }
-window.__h3Purpose = 'plan';
+      const castText = await castP;
+      const artPlan = await artPlanP;
+      window.__h3Purpose = 'plan';
       const allBeats = plan.segs.map(function (s) { return s.i + '. ' + (s.beat || ''); }).join('\n');
 const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' + castText) : '') + (artPlan ? ('\n\n【造型规划】\n' + artPlan) : '');
       const blocksArr = new Array(plan.segs.length).fill(null);
