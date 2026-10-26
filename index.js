@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 3, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'st', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: '', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 3, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', libOn: false, libBase: '', customStyle: '' };
 
   let S;
   try { S = Object.assign({}, DEFA, JSON.parse(localStorage.getItem(LSKEY) || '{}')); }
@@ -4730,6 +4730,9 @@ non_diegetic_music:
     pingNow: (typeof pingNow === 'function') ? pingNow : null,
     autoFindHost: (typeof autoFindHost === 'function') ? autoFindHost : null,
     copyTemplate: (typeof copyTemplate === 'function') ? copyTemplate : null,
+    aiDiag: (typeof aiDiag === 'function') ? aiDiag : null,
+    agentProvision: (typeof agentProvision === 'function') ? agentProvision : null,
+    agentProbe: (typeof agentProbe === 'function') ? agentProbe : null,
   };
 
   /* 兜底：所有关键按钮走事件委托，不受原绑定是否成功影响 */
@@ -4755,6 +4758,9 @@ non_diegetic_music:
       'h3v-ping': 'pingNow',
       'h3v-autoHost': 'autoFindHost',
       'h3v-tpl': 'copyTemplate',
+      'h3v-aidiag': 'aiDiag',
+      'h3v-agentProv': 'agentProvision',
+      'h3v-agentProbe': 'agentProbe',
     };
     const fnName = MAP[el.id];
     if (!fnName) return;
