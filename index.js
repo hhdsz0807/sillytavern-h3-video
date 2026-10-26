@@ -3768,7 +3768,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     let html = '';
     CHARLIB.forEach(function (c, i) {
       html += '<div class="row">' +
-        '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + thumbUrl(c.file) + '">' +
+        '<img class="pv" style="display:block;width:46px;height:46px;object-fit:cover;margin:0;border-radius:6px" src="' + (c.libUrl || thumbUrl(c.file)) + '">' +
         '<input data-cn="' + i + '" value="' + esc(c.name || '') + '" placeholder="角色名（中文）" style="flex:1">' +
         '<select data-ca="' + i + '" style="max-width:130px;flex:none"></select>' +
         '<button data-cdel="' + i + '" style="flex:none">删</button></div>';
