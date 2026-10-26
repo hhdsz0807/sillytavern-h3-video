@@ -39,6 +39,30 @@
     'max-width:none;max-height:none;background:#121820;color:#dfe7f0;z-index:2147483000;' +
     'flex-direction:column;overflow:hidden;display:none;';
 
+  function makeFab() {
+    const old = document.getElementById('h3v-fab');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    const fab = document.createElement('button');
+    fab.id = 'h3v-fab';
+    fab.title = 'H3 视频工坊（Ctrl+Alt+H）';
+    fab.textContent = '🎬';
+    fab.style.cssText = 'position:fixed;right:16px;bottom:110px;z-index:2147483000;width:52px;height:52px;' +
+      'border-radius:50%;background:#2f81f7;color:#fff;border:2px solid rgba(255,255,255,.35);font-size:22px;' +
+      'box-shadow:0 6px 18px rgba(0,0,0,.45);cursor:pointer;display:block;';
+    fab.onclick = function (e) {
+      e.preventDefault(); e.stopPropagation();
+      try {
+        const list = document.querySelectorAll('#chat .mes');
+        const last = list.length ? list[list.length - 1] : null;
+        openPanel(lastMessageText(), last ? (last.getAttribute('mesid') || last.dataset.mesid) : null);
+      } catch (err) {
+        alert('打开面板失败：' + (err && err.message ? err.message : err));
+      }
+    };
+    document.body.appendChild(fab);
+    return fab;
+  }
+
   function ensureUI() {
     if ($('#h3v-dlg')) return;
 
@@ -521,6 +545,7 @@
 
   function openPanel(text, mesid) {
     try {
+      makeFab();
       ensureUI();
       const d = $('#h3v-dlg');
       if (!d) { alert('面板没建出来（脚本异常）'); return; }
@@ -4270,8 +4295,19 @@ non_diegetic_music:
 [[/H3]]`;
 
   /* ---------- 启动 ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.altKey && (e.key === 'h' || e.key === 'H')) {
+      e.preventDefault();
+      try { ensureUI(); } catch (_) {}
+      makeFab();
+      const btn = document.getElementById('h3v-fab');
+      if (btn) btn.click();
+    }
+  });
+
   function boot() {
     try {
+      makeFab();
       ensureUI();
       attachMessageButtons();
       window.addEventListener('error', (ev) => {
