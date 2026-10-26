@@ -3819,37 +3819,59 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 外观描述要求：2D 动漫赛璐璐风格的角色设定，写清年龄、发型发色、眼睛、脸型、体型、身高观感、当前服装（颜色款式）、鞋袜、随身物；不写剧情、不写场景、不写背景。只输出角色本身出现的行，不要解释。`;
 
   async function krea2Wait(taskId) {
-    for (let t = 0; t < 100; t++) {
+    let miss = 0;
+    for (let t = 0; t < 150; t++) {
       await new Promise(function (r) { setTimeout(r, 4000); });
-      const r = await withTimeout(fetch(api('/api/krea2/history')), 20000, '出图查询');
-      const j = await r.json();
+      let j = null;
+      try {
+        const r = await withTimeout(fetch(api('/api/krea2/history')), 20000, '出图查询');
+        j = await r.json();
+      } catch (e) { j = null; }
       const jobs = (j && j.jobs) || [];
-      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0] || jobs[0];
-      if (!job) continue;
+      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0];
+      if (!job) {
+        miss++;
+        if (miss === 3) status('run', '出图：已提交，等待云端排队…');
+        if (miss >= 12) throw new Error('出图任务丢失（服务可能重启过）。任务ID：' + taskId);
+        continue;
+      }
+      miss = 0;
       if (job.state === 'error') throw new Error(job.error || '出图失败');
       if (job.state === 'done') {
         const u = (job.files || [])[0] || '';
         const m = u.match(/filename=([^&]+)/);
         return m ? decodeURIComponent(m[1]) : '';
       }
+      if (t % 5 === 0) status('run', '出图生成中… 已等 ' + (t * 4) + ' 秒');
     }
     throw new Error('出图超时');
   }
 
   async function qwen21Wait(taskId) {
-    for (let t = 0; t < 100; t++) {
-      await new Promise(function (r) { setTimeout(r, 5000); });
-      const r = await withTimeout(fetch(api('/api/qwen21/history')), 20000, '四视图查询');
-      const j = await r.json();
+    let miss = 0;
+    for (let t = 0; t < 150; t++) {
+      await new Promise(function (r) { setTimeout(r, 4000); });
+      let j = null;
+      try {
+        const r = await withTimeout(fetch(api('/api/qwen21/history')), 20000, '四视图查询');
+        j = await r.json();
+      } catch (e) { j = null; }
       const jobs = (j && j.jobs) || [];
-      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0] || jobs[0];
-      if (!job) continue;
+      const job = jobs.filter(function (x) { return x.taskId === taskId; })[0];
+      if (!job) {
+        miss++;
+        if (miss === 3) status('run', '四视图：已提交，等待云端排队…');
+        if (miss >= 12) throw new Error('四视图任务丢失（服务可能重启过）。任务ID：' + taskId);
+        continue;
+      }
+      miss = 0;
       if (job.state === 'error') throw new Error(job.error || '四视图失败');
       if (job.state === 'done') {
         const u = (job.files || [])[0] || '';
         const m = u.match(/filename=([^&]+)/);
         return m ? decodeURIComponent(m[1]) : '';
       }
+      if (t % 5 === 0) status('run', '四视图生成中… 已等 ' + (t * 4) + ' 秒');
     }
     throw new Error('四视图超时');
   }
