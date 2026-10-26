@@ -3805,16 +3805,24 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       const files = Array.from(inp.files || []);
       for (let k = 0; k < files.length; k++) {
         try {
-          status('run', '上传音频 ' + (k + 1) + '/' + files.length + '…');
-          const j = await fetch(api('/api/upload?name=' + encodeURIComponent(files[k].name) + '&kind=audio'), {
-            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: files[k],
+        status('run', '上传音频 ' + (k + 1) + '/' + files.length + ' …');
+        let j = null;
+        try {
+          j = await fetch(api('/api/upload?name=' + encodeURIComponent(files[k].name) + '&kind=audio'), {
+            method: 'POST', headers: { 'Content-Type': files[k].type || 'application/octet-stream' }, body: files[k],
           }).then(function (r) { return r.json(); });
-          if (j.error) throw new Error(j.error);
-          AUDIOLIB.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), file: j.name, ts: Date.now() });
-          try { await IDB.put(j.name, files[k], 'audio'); } catch (_) {}
-          saveAudios();
-          if (libOn()) { try { await libUpload('audios', files[k].name, files[k]); } catch (e) { LOG('lib audio upload fail', e); } }
-          renderAudioLib();
+        } catch (e1) {
+          throw new Error('① 传到 H3工作台失败（' + e1.message + '）—— APK 打开了吗');
+        }
+        if (!j || j.error) throw new Error('① H3工作台拒收：' + ((j && j.error) || '无响应'));
+        AUDIOLIB.unshift({ name: files[k].name.replace(/\.[^.]+$/, ''), file: j.name, ts: Date.now() });
+        saveAudios();
+        try { await IDB.put(j.name, files[k], 'audio'); } catch (e2) { LOG('idb audio fail', e2); }
+        if (libOn()) {
+          try { await libUpload('audios', files[k].name, files[k]); }
+          catch (e3) { status('err', '② 写硬盘失败：' + e3.message); }
+        }
+        renderAudioLib();
         } catch (e) { status('err', '上传失败：' + e.message); }
       }
       status('ok', '音频库已更新，去角色库里给角色选音色');
