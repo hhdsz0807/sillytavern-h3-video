@@ -2404,26 +2404,29 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   /* 全局闸门：DSH/模型端对并发很敏感，同一时刻最多 2 个请求，间隔 1.2s */
-  const AGENT_GATE = { running: 0, max: 16, gap: 200, last: 0, chain: Promise.resolve() };
+  const AGENT_GATE = { running: 0, max: 16, gap: 200, last: 0, queue: [] };
 
   function agentGate(fn) {
-    const run = async function () {
-      while (AGENT_GATE.running >= AGENT_GATE.max) {
-        await new Promise(function (r) { setTimeout(r, 250); });
-      }
-      AGENT_GATE.running++;
-      try {
-        const wait = Math.max(0, AGENT_GATE.gap - (Date.now() - AGENT_GATE.last));
-        if (wait) await new Promise(function (r) { setTimeout(r, wait); });
-        AGENT_GATE.last = Date.now();
-        return await fn();
-      } finally {
-        AGENT_GATE.running--;
-      }
-    };
-    const p = AGENT_GATE.chain.then(run, run);
-    AGENT_GATE.chain = p.catch(function () {});
-    return p;
+    return new Promise(function (resolve, reject) {
+      const run = function () {
+        AGENT_GATE.running++;
+        Promise.resolve()
+          .then(fn)
+          .then(function (r) {
+            AGENT_GATE.running--;
+            const nxt = AGENT_GATE.queue.shift();
+            if (nxt) nxt();
+            resolve(r);
+          }, function (e) {
+            AGENT_GATE.running--;
+            const nxt = AGENT_GATE.queue.shift();
+            if (nxt) nxt();
+            reject(e);
+          });
+      };
+      if (AGENT_GATE.running >= AGENT_GATE.max) AGENT_GATE.queue.push(run);
+      else run();
+    });
   }
 
   async function agentHttp(url, bodyStr, method) {
