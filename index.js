@@ -7,7 +7,7 @@
 
   const LOG = (...a) => { try { console.log('[h3v]', ...a); } catch (_) {} };
   const LSKEY = 'h3video.settings.v1';
-  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: true,
+  const DEFA = { host: 'http://127.0.0.1:8899', seconds: 12, mp: '0.98', aspect: '16:9 (Widescreen)', steps: 12, del: false, videoStyle: 'anime', videoConc: 2, genConc: 8, qcConc: 3, transConc: 3, autoQc: false, chain: true, videoCloud: false, maxTokens: 4000, usePresetPrompt: true, aiMode: 'agent', aiBase: '', aiKey: '', aiModel: '', presetName: '', sceneStyle: 'real', sceneConc: 3, agentUrl: 'http://127.0.0.1:3099', agentPath: '/v1/chat/completions', orchMode: false,
   orchHost: 'http://127.0.0.1:8800',
   libOn: false, libBase: '', customStyle: '' };
 
@@ -16,6 +16,14 @@
   catch (_) { S = Object.assign({}, DEFA); }
   if (!Array.isArray(S.views)) S.views = ['', '', '', '', '', ''];
   while (S.views.length < 6) S.views.push('');
+  // 一次性迁移：旧默认把「单请求编排」存成了 true（慢 4 倍那条路），清掉
+  try {
+    if (!localStorage.getItem(LSKEY + '.noOrch')) {
+      S.orchMode = false;
+      localStorage.setItem(LSKEY + '.noOrch', '1');
+      localStorage.setItem(LSKEY, JSON.stringify(S));
+    }
+  } catch (_) {}
 
   let META = { images: [] };
   let POLL = null;
@@ -244,7 +252,7 @@
           <button class="primary" id="h3v-gen" style="flex:none">按正文生成（自动分段）</button>
           <label style="min-width:auto">并发</label>
           <input type="number" id="h3v-genConc" min="1" max="16" step="1" value="8" style="max-width:56px;flex:none">
-          <label style="min-width:auto"><input type="checkbox" id="h3v-orchMode"> 单请求编排（会话内开子代理）</label>
+          <label style="min-width:auto"><input type="checkbox" id="h3v-orchMode"> 单请求编排（仅会话模式，默认关）</label>
           <label style="min-width:auto"><input type="checkbox" id="h3v-autoQc"> 生成后自动修缮</label>
           <button id="h3v-qc" style="flex:none">检查并修缮</button>
           <input type="number" id="h3v-qcConc" min="1" max="8" step="1" value="3" style="max-width:56px;flex:none" title="修缮并发">
@@ -535,7 +543,7 @@
       $('#h3v-genConc').onchange = function () { S.genConc = Number($('#h3v-genConc').value) || 3; saveS(); };
     }
     if ($('#h3v-orchMode')) {
-      $('#h3v-orchMode').checked = S.orchMode !== false;
+      $('#h3v-orchMode').checked = S.orchMode === true;
       $('#h3v-orchMode').onchange = function () { S.orchMode = $('#h3v-orchMode').checked; saveS(); };
     }
     if ($('#h3v-autoQc')) {
@@ -2403,8 +2411,9 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     return { raw: raw, origin: raw, token: '', path: path, url: raw + path };
   }
 
-  /* 全局闸门：DSH/模型端对并发很敏感，同一时刻最多 2 个请求，间隔 1.2s */
+  /* 全局闸门：同屏最多 S.genConc 个请求（跟随用户填的并发，不再写死 8） */
   const AGENT_GATE = { running: 0, max: 8, gap: 150, last: 0, queue: [] };
+  const gateMax = function () { return Math.max(1, Number(S.genConc) || 8); };
 
   function agentGate(fn) {
     return new Promise(function (resolve, reject) {
@@ -2424,6 +2433,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
             reject(e);
           });
       };
+      AGENT_GATE.max = gateMax();
       if (AGENT_GATE.running >= AGENT_GATE.max) AGENT_GATE.queue.push(run);
       else run();
     });
@@ -2450,7 +2460,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         r = await agentGate(function () {
           return withTimeout(fetch(url, {
           method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
-        }), 300000, 'Agent ');
+        }), 450000, 'Agent ');
         });
         txt = await r.text();
         const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);
