@@ -2797,13 +2797,19 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
       const cands = [];
       const ch = ctx && ctx.characters && ctx.characters[ctx.characterId];
-      if (ch) { cands.push(ch.avatar); cands.push(ch.name); }
+      if (ch && ch.name) cands.push(ch.name);
       if (ctx && ctx.name2) cands.push(ctx.name2);
-      if (ctx && ctx.character) { cands.push(ctx.character.avatar); cands.push(ctx.character.name); }
+      if (ch && ch.avatar) cands.push(ch.avatar);
+      if (ctx && ctx.character && ctx.character.name) cands.push(ctx.character.name);
+      if (ctx && ctx.character && ctx.character.avatar) cands.push(ctx.character.avatar);
       if (ctx && ctx.chatMetadata && ctx.chatMetadata.character_name) cands.push(ctx.chatMetadata.character_name);
       let id = '';
-      for (let i = 0; i < cands.length; i++) { if (cands[i] && String(cands[i]).trim()) { id = cands[i]; break; } }
-      return String(id || 'default').replace(/[^\w\-.\u4e00-\u9fa5]/g, '_');
+      for (let i = 0; i < cands.length; i++) {
+        if (cands[i] && String(cands[i]).trim()) { id = String(cands[i]).trim(); break; }
+      }
+      id = id.replace(/\.(png|jpe?g|webp|gif|json|charx|yaml|yml)$/i, "");
+      id = id.replace(/[^\w\-.\u4e00-\u9fa5]/g, "_");
+      return id || 'default';
     } catch (_) { return 'default'; }
   }
 
