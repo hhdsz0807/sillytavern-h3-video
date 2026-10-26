@@ -2404,7 +2404,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   /* 全局闸门：DSH/模型端对并发很敏感，同一时刻最多 2 个请求，间隔 1.2s */
-  const AGENT_GATE = { running: 0, max: 16, gap: 200, last: 0, queue: [] };
+  const AGENT_GATE = { running: 0, max: 8, gap: 150, last: 0, queue: [] };
 
   function agentGate(fn) {
     return new Promise(function (resolve, reject) {
@@ -2443,10 +2443,13 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           status('run', 'AI 限流，' + (waits[attempt] / 1000) + ' 秒后重试（第 ' + (attempt + 1) + ' 次）…');
           await new Promise(function (res) { setTimeout(res, waits[attempt]); });
         }
+        window.__h3ReqSeq = (window.__h3ReqSeq || 0) + 1;
+        const __seq = window.__h3ReqSeq;
+        try { console.log('[h3v] → 桥请求 #' + __seq + ' ' + url); } catch (_) {}
         r = await agentGate(function () {
           return withTimeout(fetch(url, {
-            method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
-          }), 900000, 'Agent ');
+          method: verb, headers: headers, body: verb === 'GET' ? undefined : bodyStr,
+        }), 180000, 'Agent ');
         });
         txt = await r.text();
         const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);
