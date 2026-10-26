@@ -1,0 +1,32 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A ten-second two-shot beat inside <Subject 2>: <Subject 1> kneads his aching right thumb, his stomach growls, and he reaches over to a white charging cable in the wall socket and pushes it into the hot phone. No dialogue, one small physical gag.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - same short messy black hair, pale narrow face, white T-shirt and gray shorts, barefoot, identical slim build and age as the reference.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - same tatami, stained ceiling, folded futon, wall socket and boxes, same hard slatted afternoon light now gone long and orange.
+<Audio 1> (appears in [Shot 1], [Shot 2]): reference only - fixes the timbre; no spoken line, so it survives as a pained breath and a small cough under the room tone.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] The shot begins from <Picture 1>, a close-up cropped at the collarbone, <Subject 1> (S1) sitting on the folded futon in <Picture 2> with his back against the mottled wall. The long afternoon light bars have stretched and gone amber, lying low across the tatami behind him and climbing the wall in a single hot stripe that catches the edge of his jaw. His right hand is raised in front of his chest, the thumb of the other hand digging into the base of it, kneading in small circles; the joint is pink and slightly swollen from hours of tapping, and each press pulls a small flinch at the corner of his mouth.
+
+His stomach gives a low, unmistakable growl, loud in the quiet room. He stops kneading, presses his free palm flat against his belly, and winces, eyebrows drawing together; then he huffs a tired, self-deprecating breath through his nose and lets his head fall back against the wall for half a second. The camera holds steady at eye level with a barely perceptible drift in, keeping the thumb, the belly and his face in one frame.
+
+[Shot 2] At 00:05.000, a cut to a lower, wider angle across the tatami: the wall socket in the corner of <Picture 2> sits in a bar of amber light, a white charging cable plugged into it, its loose end lying curled on the rush mat. <Subject 1> (S1) leans across frame from the right, one hand braced on the tatami, the other reaching for the cable; the white T-shirt pulls across his back and the gray shorts ride up at the hip. He picks up the connector, turns it once to orient it, and pushes it into the port of the phone lying beside his knee. The port catches the light; the plug seats with a small click and the screen wakes, glowing up onto his forearm and the underside of his chin.
+
+He lets go, sits back on his heel, and shakes the sore right hand loosely twice, as if flicking water off it. The camera cranes down and in a little, ending on the seated plug and the lit screen edge. Focus racks from his hand to the connector as it seats.
+
+overall_soundscape:
+Warm late-afternoon room tone, a thin traffic wash and one distant train beyond the blind, the dry creak of the old floor as he leans, the soft friction of the cable dragging on tatami, the hard little click of the connector seating, his pained exhale, and one low stomach growl that sits clearly above the room tone.
+
+non_diegetic_music:
+Sparse solo piano at roughly 60 BPM, two low notes and a single unresolved high note with long reverb, very quiet under the growl and the click; it fades out on the last frame rather than closing the phrase.
+[[/H3]]

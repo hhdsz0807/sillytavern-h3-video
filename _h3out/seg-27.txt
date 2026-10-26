@@ -1,0 +1,34 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A ten-second closing two-shot inside <Subject 2>: <Subject 1> lays the charging phone flat on the tatami, watches the charging icon come up, then lies back on the futon planning to buy a laptop with his first royalties. One off-screen voice-over line, amber late-afternoon light.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - same short messy black hair, pale narrow face, white T-shirt and gray shorts, barefoot, identical slim build and age as the reference.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - same tatami, stained ceiling, futon and boxes, same hard slatted light now low and amber across the floor.
+<Audio 1> (appears in [Shot 2]): attribute_transfer - timbre reference for the single off-screen voice-over line, dry and quietly pleased.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] The shot begins from <Picture 1>, a high angle looking down at the tatami of <Picture 2> and at <Subject 1> (S1) seated at the frame edge, one knee up, the phone in his right hand. He sets the phone down flat on the woven rush mat and lets go, his fingers opening slowly as if releasing something hot; the amber light bars lie across the mat in long soft-edged stripes, and the phone's dark glass catches one of them.
+
+The screen wakes: a charging icon fills the middle of the glass, a small white bolt inside a ring, and the battery percentage ticks upward beside it. The icon pulses gently once, then holds steady. He watches it for a beat, his face at the edge of frame, half lit, the sore thumb of his other hand still resting against his knee. The camera tilts slowly down from his shoulder to the flat phone, settling into a near-overhead composition with the tatami weave and the light bars filling the background; a single dust mote drifts through the brightest stripe.
+
+[Shot 2] At 00:05.000, a cut to a low side angle: <Subject 1> (S1) lowers himself back onto the folded futon, one arm folding behind his head, the other hand resting on his stomach. The white T-shirt rides up a little at the waist; his bare feet slide apart on the mat. The ceiling of <Subject 2> fills the upper half of frame, yellowed plaster with its damp stains, the last hard bars of light sliding slowly across it as the afternoon goes.
+
+He looks up at it, blinking once, and a slow, planning smile spreads — not the greedy grin from earlier, something quieter and more patient. His eyes move as if sketching a room he has not seen yet. The camera drifts down and in from above his feet to a soft medium shot of his face and the ceiling together, holding there as the light goes amber-orange.
+
+<Subject 1> (S1, off-screen voice-over) says, <d>[Chinese] 等第一笔稿费到账，先去秋叶原淘一台能正经干活的笔记本电脑。</d>
+
+overall_soundscape:
+Quiet late-afternoon interior: low room tone, a distant train and a single bird beyond the blind, the soft slap of the phone settling on tatami, a faint electronic chime as charging begins, the rustle of the futon and T-shirt as he lies back, the creak of old floorboards under his weight, and his slow exhale close to the microphone.
+
+non_diegetic_music:
+Sparse solo piano at roughly 60 BPM, a warm three-note rising figure repeated softly with long reverb, slightly fuller than earlier but still low in the mix; it enters under the voice-over and holds unresolved as the image fades on the amber light.
+[[/H3]]

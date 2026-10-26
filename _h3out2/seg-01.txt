@@ -1,0 +1,30 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A twelve-second opening inside <Subject 2>: an empty macro of the sunlit rush-grass tatami drifts up across the stained ceiling to the folded futon, then <Subject 1> sits up with two fingers pressed to his temple as two sets of memories grind into alignment, opens his eyes and turns his thin wrist slowly in the light. No dialogue, no voice-over.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 2]): fully_preserved - same short messy black hair, pale narrow face, dark brown eyes, white T-shirt and gray shorts, barefoot, identical slim build and age as the reference.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - same tatami, yellowed stained ceiling, thin futon, boxes and bare socket, same hard blind-slat afternoon light.
+<Audio 1> (appears in [Shot 2]): attribute_transfer - timbre reference only for breath and a single shaky exhale, no spoken line.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] The shot begins in <Picture 2>, an extreme macro of the woven rush-grass tatami: thick green-brown stalks, frayed fibers, a few crumbs of dust caught in the weave. Hard rectangular bars of afternoon sunlight from the half-closed plastic venetian blind slide slowly across the mat, and inside each bright bar tiny dust motes tumble and glint as they turn. The camera holds on the weave, then begins a very slow, steady tilt upward, grazing the edge of the mat, climbing the bare wall, passing across the yellowed, damp-stained ceiling with its brown tide-ring blooms and faintly lifting paper, before settling on the folded thin futon against the white wall and the empty corner socket. The slat shadows keep crawling; the room is completely still and empty, with no one in frame. Sound: only the room itself, a dry tick from the warming tatami, a faint creak from the old wooden structure, distant sparrows and one far-off car on the street below.
+
+[Shot 2] At 00:05.500 the shot begins from <Picture 1>: <Subject 1> (S1) pushes himself up out of the folded futon, the thin quilt sliding off his shoulder, and sits upright with his back slightly hunched, the loose white T-shirt hanging off his narrow frame. His right hand comes up and two fingers press hard against his right temple, eyes squeezed shut, jaw clenched, breath shallow and quick; behind his closed lids two sets of memories compress and grind against each other, and a small tremor runs through his forearm. The camera eases into a slow, shallow push-in and holds on his face, the hard bars of light crossing his cheekbone and the collar of the shirt.
+
+Then his eyes open, unfocused, pupils contracting in the strong light, and he looks down at his own thin left wrist, lifting it into a bar of sun and turning it slowly over, as if checking that the hand belongs to him. The pale skin is thin over the bone, the wrist narrower than he expects, and his fingers flex once. He exhales through his nose, long and unsteady, and lets the hand drop to his knee.
+
+overall_soundscape:
+A hushed, enclosed room tone: the dry tick and settle of rush-grass tatami warming in the sun, the faint creak of old floorboards and beams, distant sparrows and a far-off car on the street below, cloth rustling and sliding as the thin quilt is pushed aside, one sharp intake of breath, a slow shaky exhale, fabric shifting at the elbow, skin brushing skin as the wrist turns, and long low afternoon silence between these sounds, strictly action-synced.
+
+non_diegetic_music:
+Sparse solo piano at roughly 60 BPM, low dynamic, long reverberant tail, a few soft unresolved notes spaced widely apart, fading out under the room tone before the cut.
+[[/H3]]

@@ -1,0 +1,30 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] In a single cramped six-mat apartment, a fictional adult character sets his phone down on the tatami to charge, watches the battery climb, then leans back against the wall and lets a small calculating smile form while the afternoon light deepens to amber; the whole piece stays locked to one person and one room, with the hand task fixed as laying the phone flat and leaving it there, no second person, no split screen, no duplicated figure, and no on-screen letters or watermarks except the phone's own interface text.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose plain white T-shirt, soft gray shorts, barefoot, and the same face in both shots.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the yellowed damp-stained ceiling, rush-grass tatami, folded futon, two half-unpacked boxes with an old supermarket produce logo, bare wall socket and hard blind-slat sunlight all stay in place.
+<Audio 1> (appears in [Shot 2]): fully_preserved - used only as the voice timbre of the off-screen narration, never as a visible element.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] A high angle looks straight down at the tatami floor, where <Subject 1> lowers the phone and lays it flat on the woven rush grass with both hands, screen facing up. The charging icon blinks on at the center of the glass and the battery percentage beside it climbs upward, one digit at a time. The hard slat shadows of the half-closed venetian blind lie across the screen and the mat in long parallel bars, and where the light crosses the glass the icon glows a little brighter. His bare knees and one hand stay at the edge of the frame while the other hand withdraws out of shot. Dust drifts slowly through the warm shaft of light. The camera holds almost still, easing down a few centimeters; then the phone gives one small vibration that ripples the icon and makes the shadow bars shiver across the screen.
+
+[Shot 2] At 00:05.500, the shot begins from <Picture 1>: the camera pulls back and rises into a low medium shot as <Subject 1> shifts his weight back against the wall and sits with his legs folded under him, one shoulder resting on the plaster. The phone lies on the tatami in the foreground, its screen still lit with the author backend page, the green 已公开连载 badge glowing steadily near the top of the interface. He looks down at it without reaching for it, his dark brown eyes moving once across the screen, his breathing showing as a slow rise and fall of the loose white T-shirt. Then he tilts his head back and looks up at the yellowed, damp-stained ceiling, and a calculating smile forms on his pale narrow face, the corner of his mouth lifting first and then his eyes narrowing with it. The hard afternoon light has shifted and deepened toward amber, so the slat shadows on the tatami stretch longer and the edges of the room warm toward dusk. The camera drifts in a slow arc to the right and settles slightly low, holding the phone, his face and the ceiling in one unbroken composition, and his lips move faintly with the off-screen voice-over.
+
+<Subject 1> (S1, off-screen voice-over) says, <d>[Chinese] 等第一笔稿费到账，先去秋叶原淘一台能正经干活的笔记本电脑。</d>
+
+overall_soundscape:
+A quiet second-floor room tone: faint street traffic and a distant train crossing filtering through the thin window glass, the soft dry creak of old floorboards settling, a light breeze nudging the plastic blind slats so they click once or twice. In [Shot 1] the phone taps down onto the rush grass, the charging plug clicks home, a two-note system chime sounds at the start of charging, and a short vibration buzzes against the tatami, all strictly action-synced. In [Shot 2] only his slow breathing, the rustle of the T-shirt against plaster as he leans back, and the faint dry whisper of his heel sliding on the mat.
+
+non_diegetic_music:
+Sparse solo piano at about 60 BPM, low dynamic, long reverb, a few unhurried rising thirds that thin out into a single held note as the light turns amber and fade out under the narration.
+[[/H3]]

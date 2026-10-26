@@ -1,0 +1,26 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A single quiet beat of realization inside <Subject 2>: <Subject 1> sits alone on the folded futon, the cheap phone loose in his hand, a wordless understanding arriving before any thought can be named, and the cut then lands on the phone screen where a silver-blue key icon has appeared above one line of Chinese UI text reporting a live connection to Earth-2026 at one millisecond of latency. Only <Subject 1> appears; there is exactly one of him, no second figure, no split screen, no seam or frame border; pure flat 2D cel animation with no 3D rendering, no CGI shading and no realistic skin texture; no subtitles, captions, watermarks or letters anywhere except the phone UI text explicitly required.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - identical short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose plain white T-shirt and soft gray shorts, barefoot.
+<Subject 2> (appears in [Shot 1], [Shot 2]): partially_preserved - the yellowed wall, tatami and blind-slat light survive as soft out-of-focus background around the close-up and the screen macro.
+<Audio 1> (appears in [Shot 1], [Shot 2]): timbre reference only - used to keep the single soft intake of breath and the shallow uneven breathing in the same young male voice as <Subject 1>.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+[Shot 1] The shot begins from <Picture 1>, held in a tight close-up at eye level, <Subject 1> filling most of the frame against the yellowed wall of <Subject 2>; his short messy black hair is lit along one edge, a hard slab of blind-slat shadow cuts across his cheek and jaw, and dust hangs glowing in the light behind him. He tilts his head slowly to one side, eyes losing focus, pupils drifting as if reading something written behind the room instead of inside it; his lips part a little and no sound comes out. The room behind him is a flat wash of warm beige, with the edge of the tatami just visible along the bottom of the frame. The cheap phone stays forgotten in his loose right hand, its screen still glowing faintly upward and laying a thin blue rim under his chin, and inside each dark pupil a small blue key-shaped reflection sits as one bright dot. The camera performs a very slow, almost imperceptible push in, with no cut and no angle change. Sound is the room's low hush, a distant bicycle bell, and his breath catching once.
+[Shot 2] At 00:05.500, the shot begins from <Picture 1> and cuts to the phone screen itself, held slightly tilted, his thumb entering frame from the lower right. The notification shade is dragged down; the silver-blue key icon sits at the top with a soft metallic sheen along its edge and throws one thin horizontal glint across the glass, and beneath it a single line of text is clearly legible: 已连接：Earth-2026（延迟 1ms）. His fingertip hovers above that line, then trembles once, a small involuntary quiver, before settling; the screen's white glow washes over his thumb and over the blurred edge of his face at the frame border, while behind him the tatami and the bars of blind-slat shadow fall into soft bokeh. The camera stays locked in macro with a faint handheld micro-drift. Sound is the soft tick of the screen responding, his breathing gone shallow and uneven, and the faint creak of old floorboards.
+
+overall_soundscape:
+A close, enclosed room tone with almost no echo: the dry hush of a six-mat wooden apartment, faint traffic and one distant bicycle bell filtering through the half-closed blind, the tiny plastic tick of the phone screen registering a touch, a single caught breath, then shallow uneven breathing held close to the microphone, and the low creak of old floorboards settling under his weight. Every sound stays strictly action-synced, with no music bleeding into the ambience and no voices.
+
+non_diegetic_music:
+A sparse solo piano at roughly 60 BPM, low dynamic, long reverb, only a few single notes spaced wide apart under the close-up and one soft sustained tone as the fingertip trembles, then thinning away to silence at the cut.
+[[/H3]]

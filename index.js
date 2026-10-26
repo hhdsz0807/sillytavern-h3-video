@@ -2846,6 +2846,22 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
   /* 把超出实际素材数的 <Picture N> / <Audio N> 拉回合法范围，避免模型瞎指图 */
   /* 镜头数硬性要求，拼进 system 尾部 */
+  /* 把超出上限的镜头合并进最后一镜，保证 [Shot] 数量一定合规 */
+  function mergeShots(block, cap) {
+    const s = String(block || "");
+    const parts = s.split(/(?=\[Shot \d+\])/);
+    const head = parts[0] || "";
+    const shots = parts.slice(1);
+    if (shots.length <= cap) return s;
+    const keep = shots.slice(0, cap - 1);
+    const rest = shots.slice(cap - 1);
+    const restBody = rest.map(function (x) {
+      return x.replace(/^\[Shot \d+\]\s*(At\s+\d{2}:\d{2}\.\d{3},?\s*)?/i, "").trim();
+    }).join(" ");
+    const merged = (rest[0] || "").replace(/^\[Shot \d+\]/, "[Shot " + cap + "]").replace(/\s+$/, "") + " " + restBody;
+    return head + keep.join("") + merged;
+  }
+
   function shotRule(sec) {
     const n = Math.max(1, Math.min(3, Math.round(Number(sec) / 6)));
     return '\n\n【本段绝对硬性要求】只能输出 ' + n + ' 个 [Shot]（编号 [Shot 1] 连续到 [Shot ' + n + ']），多一个都算不合格；每镜至少 4 秒。';
@@ -4521,7 +4537,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       for (let k = 0; k < segs.length; k++) {
         const nm = 'seg-' + String(segs[k].i).padStart(2, '0') + '.txt';
         let txt = '';
-        for (let attempt = 0; attempt < 10; attempt++) {
+        for (let attempt = 0; attempt < 4; attempt++) {
           try {
             const r = await fetch(host + '/h3out/' + jobId + '/' + nm + '?t=' + Date.now());
             if (r.ok) { txt = await r.text(); }
@@ -4650,6 +4666,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
     }
         nb = ensureAudioTags(nb, cast);
         nb = applyVideoStyle(nb);
+    nb = mergeShots(nb, Math.max(1, Math.min(3, Math.round(sec / 6))));
         blocksArr[i] = nb;
         if (cast) {
           SEGCAST[i] = cast;

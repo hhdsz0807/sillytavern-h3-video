@@ -1,0 +1,29 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A quiet two-shot beat inside <Subject 2> in which <Subject 1>, a fictional adult in a fifteen-year-old body, finishes pulling a full novel archive onto his cheap second-hand phone, unpacks it, and scrolls the dozens of chapter-sorted volumes that now sit in his hand, letting the scale of what he has just secured land on him; his hands are locked to the screen and the scroll, exactly one boy appears in frame, no split screen or duplicate, and no lettering appears anywhere except the phone interface itself.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose plain white T-shirt, soft gray shorts and bare feet all stay identical to <Picture 1>, with his thumb and forearm the only body parts in [Shot 1].
+<Subject 2> (appears in [Shot 1], [Shot 2]): partially_preserved - the tatami, the folded futon, the yellowed ceiling and the hard blind-slat light remain correct, but in [Shot 1] the room is only a warm defocused beige backdrop behind the phone screen.
+<Audio 1> (appears in [Shot 2]): fully_preserved - its timbre anchors the single slow exhale in [Shot 2]; no spoken line is delivered in this segment.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] The shot opens in <Picture 2> as an extreme macro on the phone screen held in <Subject 1>'s two hands, the device tilted above the folded futon while the room behind melts into a warm, soft-focus beige blur. The download bar sits near its left edge, then snaps to full in a single frame, the progress arc closing with no intermediate states; a small confirmation line appears and the archive drops into the local folder, its file icon and size crisp on the scratched glass. A fingertip enters from the lower right and presses once, and the extraction app unfolds a dense grid of plain text files, rows of identical document icons cascading downward in tidy columns, each row sliding into place with a small mechanical snap. Hard blind-slat shadows slide across the screen and over the back of his hand as the light shifts; dust drifts through the beam above the phone. The camera holds a tight, almost motionless macro and drifts a few millimeters closer as the file grid settles. Synchronous sound: a soft tap, the thin plastic click of the screen, a rapid stuttering series of interface ticks as the rows populate.
+
+[Shot 2] At 00:05.500, the shot begins from <Picture 1>, cutting to a medium close-up of <Subject 1> seated cross-legged on the futon, the phone tilted toward his face, his pale narrow face lit from below by the screen, dark brown eyes tracking down the list. The camera eases over his shoulder and settles at a slight angle so his profile and the glass both stay readable. On the screen the file list scrolls in one long smooth glide: volume one, volume two, volume three, each folder opening into chapter files numbered in order, dozens of volumes stacking past the bottom edge. The scroll slows, drifts, and stops. His thumb comes to rest on the glass, motionless. He exhales slowly through his nose, shoulders sinking, the tension leaving his jaw; the hard afternoon light cuts a bright band across his white T-shirt and the tatami behind him. The camera holds, then pushes in a few centimeters on his face as his eyes stay fixed on the first volume's opening chapter. Synchronous sound: the faint dry whisper of the screen scrolling, a single soft tap as his thumb settles, his long quiet exhale, and the creak of old floorboards under the futon.
+
+overall_soundscape:
+Tight, close interior ambience: the low hum of the old apartment's wiring, a faint distant traffic wash through the closed window, the thin rattle of the plastic blind in a light draft, and the dry creak of floorboards settling. Strictly action-synced physical sounds: the small tap and plastic click of the fingertip on glass, the rapid stuttering interface ticks as the extracted file rows fill in, the faint dry whisper of the list scrolling under his thumb, a single soft tap when the thumb stops, and his long slow exhale at the end. No music in the room, no voices.
+
+non_diegetic_music:
+Sparse solo piano at roughly 60 BPM, low dynamics, long reverb; a handful of unhurried notes spaced wide apart, thinning out and settling into silence as the scroll stops and he exhales.
+[[/H3]]

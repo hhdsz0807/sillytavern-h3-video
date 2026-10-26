@@ -1,0 +1,27 @@
+[[H3]]
+<!--CAST: 白井玄一 | SCENE: 白井玄一的廉租房-->
+subject_definitions:
+<Subject 1> is the 15-year-old Japanese boy in <Picture 1>, with short messy black hair, a pale narrow face, dark brown eyes and a slim, slightly underfed build; he wears a loose plain white T-shirt and soft gray shorts, barefoot with no socks.
+<Subject 2> is the cramped six-mat one-room apartment in <Picture 2>, an old wooden second-floor unit with a yellowed, damp-stained ceiling, a tatami floor of woven rush grass, a thin folded futon, two half-unpacked cardboard boxes with an old supermarket produce logo, a bare wall socket in one corner and almost no furniture, lit by hard afternoon sunlight slicing through a half-closed plastic venetian blind.
+<Audio 1> is the voice-timbre reference for <Subject 1>.
+
+summary:
+[reference generation] A single continuous scene inside <Subject 2>, built from <Picture 1> and <Picture 2>: <Subject 1> sits alone on the folded futon with his battered phone, and the screen's glow, the widening of his eyes and one stifled laugh carry him from disbelief into greedy certainty while his off-screen voice explains what the year 2019 is worth to a man from 2026. Only one boy is present, no second copy of him, no split screen, no frame lines; apart from the phone display there is no lettering, subtitle, caption or watermark anywhere in the image, and the whole piece stays pure flat 2D cel animation with no 3D rendering, no CGI shading and no realistic skin texture.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - the same short messy black hair, pale narrow face, dark brown eyes, slim underfed build, loose white T-shirt, gray shorts and bare feet; his face is the subject of an extreme close-up in [Shot 1] and stays recognizable in the over-the-shoulder framing of [Shot 2].
+<Subject 2> (appears in [Shot 1], [Shot 2]): partially_preserved - the six-mat room, tatami, folded futon, cardboard boxes and damp-stained ceiling remain present, but in this segment they are mostly soft, dim background behind his face and behind the glowing screen.
+<Audio 1> (appears in [Shot 1], [Shot 2]): fully_preserved - used only as the voice-timbre reference for the off-screen narration of <Subject 1>; it supplies no visual content.
+
+detailed_description:
+Anime style: clean 2D cel animation over hand-painted backgrounds, muted beige and dusty gray palette, warm afternoon light with hard blind-slat shadows, gentle shallow depth of field and steady, unhurried camera movement.
+
+[Shot 1] The shot begins from <Picture 1>, held in an extreme close-up that crops the top of his messy black hair and the edge of his jaw, so the frame is almost entirely his pale narrow face. <Subject 1> is half-propped on the folded futon in <Subject 2>, chin tipped down toward the phone in his hand, and the screen's cold white glow strikes him from below, lighting the undersides of his cheekbones, his nose and his lower lip while everything behind him stays dim and soft. His dark brown eyes are wide and his pupils are visibly enlarged, flicking across the glass in small, fast jumps. His breathing is audible and quickening, the shallow lift of his thin shoulders pressing the loose white T-shirt against his collarbone, and a smile he clearly cannot hold back pulls at one corner of his mouth, then the other, until his teeth show. Hard afternoon sunlight slices through the half-closed plastic venetian blind and lays narrow bright bars across the tatami behind him; as the camera drifts in almost imperceptibly, one bar slides slowly over his cheek and the bridge of his nose, brightening his eye and then letting it go dark again. <Subject 1> (S1, off-screen voice-over) says, <d>[Chinese] 从2026年过来的打工人太清楚2019年意味着什么了。加密货币还在低谷，英伟达的股价还没因为人工智能浪潮飞上天。只要把手里仅剩的那点安置费加上接下来打工攒的钱全塞进美股，买几股放着不动，这辈子都不用再看任何老板的脸色。</d>
+
+[Shot 2] At 00:05.500, the image cuts to an over-the-shoulder angle from behind <Subject 1>: his black hair and one shoulder sit soft and dark in the near foreground, out of focus, framing the glowing phone screen beyond him. The glass shows a plain stock listing page with a pale candle chart, its small marks unreadable at this distance, and it is the only light in the shot, so the six-mat room falls away into shadow on every side of that bright rectangle, the tatami, the cardboard boxes and the damp-stained ceiling sinking into dusty gray. His right thumb hangs in the air above the screen without touching it, trembles once, then goes still. A single short laugh escapes through his nose, his shoulders jerking with it, and the glow on the glass shivers for that instant. The camera holds steady, then eases a few centimeters closer, keeping his shoulder at the frame edge. His breathing slows into something satisfied, and a thin edge of the blind-slat sunlight creeps along the wall behind the phone, never reaching his face.
+
+overall_soundscape:
+Quiet interior room tone with a faint wooden-building creak; his breathing is close and uneven in the first shot, tightening into short shallow pulls, and the plastic blind ticks softly as the light bars shift. In the second shot a single muffled snort of laughter through the nose, the rustle of the futon under his weight, a dry swallow, and the faint electric hum of the phone, all strictly action-synced.
+non_diegetic_music:
+Sparse solo piano at about 60 BPM, low dynamic, long reverb tails, a few hesitant high notes under the close-up and a single sustained low note as the camera settles behind him.
+[[/H3]]
