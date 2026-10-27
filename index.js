@@ -3335,15 +3335,41 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   function parseSceneLines(text) {
-    const out = [];
-    String(text || '').split('\n').forEach(function (l) {
-      l = l.trim().replace(/^[-*\d.、\s]+/, '');
-      if (!l) return;
-      const parts = l.split(/[|｜]/);
-      if (parts.length >= 2) out.push({ name: parts[0].trim(), prompt: parts.slice(1).join('|').trim() });
-      else out.push({ name: '场景' + (out.length + 1), prompt: l });
+    const rawLines = String(text || '').split('\n').map(function (l) {
+      return l.trim().replace(/^[-*\d.、\s]+/, '').replace(/^\*+|\*+$/g, '').trim();
+    }).filter(Boolean);
+    // 去掉「共 4 个场景。」这类结尾统计行、以及明显不是场景的行
+    const lines = rawLines.filter(function (l) {
+      if (/^共\s*\d+\s*(个)?\s*场景/.test(l)) return false;
+      if (/^(共|合计|总计|total)/i.test(l) && l.length < 24) return false;
+      return true;
     });
-    return out.slice(0, 6);
+    const withPipe = lines.filter(function (l) { return /[|｜]/.test(l); });
+    const src = withPipe.length ? withPipe : lines;   // 全都没有分隔符时才退化成「自动命名」
+    const out = [];
+    src.forEach(function (l) {
+      const parts = l.split(/[|｜]/);
+      if (parts.length >= 2) {
+        const name = parts[0].trim();
+        const prompt = parts.slice(1).join('|').trim();
+        if (!name || prompt.length < 12) return;    // 名字空 / 提示词太短 → 不是场景行
+        if (/^共\s*\d+/.test(name)) return;
+        out.push({ name: name, prompt: prompt });
+      } else {
+        if (l.length < 20 || !/\s/.test(l)) return;  // 只有长句才当英文提示词
+        out.push({ name: '场景' + (out.length + 1), prompt: l });
+      }
+    });
+    // 同名去重（保留第一个）
+    const seen = {};
+    const uniq = [];
+    out.forEach(function (s) {
+      const k = normName(s.name);
+      if (k && seen[k]) return;
+      if (k) seen[k] = 1;
+      uniq.push(s);
+    });
+    return uniq.slice(0, 6);
   }
 
   async function scenePlan() {
