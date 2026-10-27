@@ -1143,9 +1143,11 @@
     return list.filter(function (a) { return a && a.apiKey; });
   }
 
+  /* 提交被云端临时挡住的可重试错误（含 RunningHub 的 421 TASK_QUEUE_MAXED） */
+  const RETRY_RE = /并发|busy|已满|rate|429|421|502|503|TASK_QUEUE|QUEUE_MAX|队列|timeout|超时|Failed to fetch|network|no account|没有账号|未登录|unauthor|401|403/i;
   function isTransientErr(err) {
     const m = String(err && err.message || '') + ' ' + String((err && err.rhCode) || '');
-    return /并发|busy|已满|rate|429|502|503|timeout|超时|Failed to fetch|network|no account|没有账号|未登录|unauthor|401|403/i.test(m);
+    return RETRY_RE.test(m);
   }
 
   async function cloudVideo(opts) {
@@ -1517,16 +1519,17 @@
         jobLabel('批量 · 第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
         try {
           let id = null, tries = 0;
-          while (tries < 12) {
+          while (tries < 30) {
             try {
               id = await submitBlock(blocks[i], sec, SEGCFG[i], SEGIMG[i]);
               break;
             } catch (e) {
               const m = String(e && e.message || '');
-              if (/并发|busy|已满|RUNNING|账号|登录|API Key|未授权|401|403/i.test(m) && !STOP_ALL && tries < 12) {
+              if (RETRY_RE.test(m) && !STOP_ALL && tries < 30) {
                 tries = (tries || 0) + 1;
-                const wait = Math.min(30000, 4000 * tries);
-                status('run', '第 ' + (i + 1) + ' 条并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + '/12 次）…');
+                const wait = Math.min(45000, 3000 + 1500 * tries);
+                const why = /TASK_QUEUE|421|队列/i.test(m) ? '云端队列已满（账号并发上限）' : '提交被挡（并发/限流）';
+                status('run', '第 ' + (i + 1) + ' 条' + why + '，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + '/30 次）…');
                 await sleep(wait);
                 continue;
               }
