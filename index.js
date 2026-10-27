@@ -1410,35 +1410,66 @@
     } catch (e) { LOG('rename fail', e); }
     return r;
   }
+  /* 接尾帧开着时只能串行；用户要并发就当场问一句，同意则关掉接尾帧 */
+  function maybeDropChainForConcurrency(want) {
+    if (S.chain === false) return want;
+    if (want <= 1) return 1;
+    let ok = false;
+    try {
+      ok = window.confirm('「接尾帧」开着时只能串行（每一段都要用上一段的最后一帧）。\n\n确定 = 关掉接尾帧，按并发 ' + want + ' 跑\n取消 = 保留接尾帧，串行跑');
+    } catch (_) { ok = false; }
+    if (ok) {
+      S.chain = false;
+      saveS();
+      const cb = $('#h3v-chain');
+      if (cb) cb.checked = false;
+      return want;
+    }
+    return 1;
+  }
+
   async function runRange() {
     const blocks = parseBlocks($('#h3v-prompt').value);
     if (!blocks.length) { status('err', '没有提示词'); return; }
     let a = Math.max(1, Number(($('#h3v-from') || {}).value || 1));
     let b = Math.min(blocks.length, Number(($('#h3v-to') || {}).value || a));
     if (b < a) { const tmp = a; a = b; b = tmp; }
+    const total = b - a + 1;
     const btn = $('#h3v-runRange');
     if (btn) btn.disabled = true;
+    let conc = Math.min(Math.max(1, Number(S.videoConc || 2)), total);
+    conc = Math.min(maybeDropChainForConcurrency(conc), total);
     newRunTag();
-    jobBegin('生成区间 ' + a + '–' + b + '（串行）· 标记 ' + RUN_TAG);
+    jobBegin('生成区间 ' + a + '–' + b + ' · 并发 ' + conc + ' · 标记 ' + RUN_TAG);
     pgSet(0);
-    let okN = 0, coins = 0;
-    for (let i = a - 1; i < b; i++) {
-      const sec = blockSeconds(blocks[i]);
-      jobLabel('第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
-      status('run', '正在提交第 ' + (i + 1) + ' 条…' + (i > a - 1 ? '（会用上一段尾帧）' : ''));
-      try {
-        const r = await runOne(blocks[i], sec, '第 ' + (i + 1) + ' 条', SEGCFG[i], SEGIMG[i], i);
-        okN++; coins += r.coins || 0;
-        showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
-        pgSet(100 * (i - a + 2) / (b - a + 1));
-      } catch (e) {
-        status('err', '第 ' + (i + 1) + ' 条失败：' + e.message);
-        break;
+    let cursor = a - 1, okN = 0, doneN = 0, coins = 0;
+
+    async function worker() {
+      while (true) {
+        const i = cursor++;
+        if (i >= b) return;
+        const sec = blockSeconds(blocks[i]);
+        jobLabel('区间 · 第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
+        try {
+          const r = await runOne(blocks[i], sec, '第 ' + (i + 1) + ' 条', SEGCFG[i], SEGIMG[i], i);
+          okN++;
+          coins += r.coins || 0;
+          showVideos(r, '第 ' + (i + 1) + ' 条 · ' + sec + 's');
+        } catch (e) {
+          LOG('range fail', i, e);
+          status('err', '第 ' + (i + 1) + ' 条失败：' + e.message);
+        }
+        doneN++;
+        pgSet(100 * doneN / total);
+        status('run', '区间进度 ' + doneN + '/' + total + '（成功 ' + okN + '）' + (coins ? ' · 已花 ' + coins + ' 币' : ''));
       }
     }
+    const ws = [];
+    for (let k = 0; k < conc; k++) ws.push(worker());
+    await Promise.all(ws);
     jobEnd();
     if (btn) btn.disabled = false;
-    status(okN ? 'ok' : 'err', '区间完成：' + okN + ' 条' + (coins ? ' · ' + coins + ' 币' : ''));
+    status(okN ? 'ok' : 'err', '区间完成：' + okN + '/' + total + ' 条' + (coins ? ' · ' + coins + ' 币' : ''));
   }
 
   async function runVideo() {
@@ -1470,7 +1501,7 @@
     if (!blocks.length) { status('err', '没有提示词'); return; }
     if (blocks.length === 1) return runVideo();
     let conc = Math.max(1, Number(S.videoConc || 2));
-    if (S.chain !== false) { conc = 1; status('run', '已开启「接上一段尾帧」→ 只能串行跑（否则后一段拿不到前一段的尾帧）'); }
+    conc = maybeDropChainForConcurrency(conc);
     const btn = $('#h3v-runAll');
     btn.disabled = true;
     newRunTag();
