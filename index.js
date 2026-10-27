@@ -233,7 +233,7 @@
         </div>
         <div id="h3v-segTable"></div>
 
-        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button><label style="min-width:auto" title="整片目标总时长（秒），规划/复制给 Agent 都用它">总时长</label><input type="number" id="h3v-totalSec" min="15" max="900" step="15" value="180" style="max-width:74px;flex:none"><button id="h3v-agentcopy" class="primary" style="flex:none" title="把正文 + 规划/六段/修缮提示词 + 16 路并发要求，一次性复制成给 agent 会话的任务书">复制到 Agent 会话</button></div>
+        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button><label style="min-width:auto" title="整片目标总时长（秒）；填 0 = 让模型按正文自己判断">总时长</label><input type="number" id="h3v-totalSec" min="0" max="900" step="5" value="0" style="max-width:74px;flex:none" placeholder="0=自动"><button id="h3v-agentcopy" class="primary" style="flex:none" title="把正文 + 规划/六段/修缮提示词 + 16 路并发要求，一次性复制成给 agent 会话的任务书">复制到 Agent 会话</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
   <div class="row">
@@ -406,8 +406,8 @@
     if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
     if ($('#h3v-story')) $('#h3v-story').onclick = showStoryText;
     if ($('#h3v-totalSec')) {
-      $('#h3v-totalSec').value = String(S.totalSec || 180);
-      $('#h3v-totalSec').onchange = function () { S.totalSec = Math.max(15, Number($('#h3v-totalSec').value) || 180); saveS(); };
+      $('#h3v-totalSec').value = String(S.totalSec || 0);
+      $('#h3v-totalSec').onchange = function () { S.totalSec = Math.max(0, Number($('#h3v-totalSec').value) || 0); saveS(); };
     }
     if ($('#h3v-agentcopy')) $('#h3v-agentcopy').onclick = copyAgentBrief;
     $('#h3v-run').onclick = runVideo;
@@ -1563,9 +1563,22 @@
   /* 复制到 Agent 会话：正文 + 规划/六段/修缮三套提示词 + 16 路并发要求，一条粘贴即用 */
   function agentBrief() {
     const text = storyText();
-    const total = Math.max(15, Number(S.totalSec || 180));
+    const total = Math.max(0, Number(S.totalSec || 0));
+    const auto = !(total > 0);
     const per = 10;
-    const est = Math.max(1, Math.round(total / per));
+    const est = auto ? 0 : Math.max(1, Math.round(total / per));
+    const durSection = auto ? [
+      '## 2. 总时长（你自己判断，别问用户要）',
+      '- 先按正文真实节奏估整片要多少秒：中文朗读约 4 字/秒，影视化会略长；**不注水、不硬砍剧情**。',
+      '- 每段 4–15 秒（H3 单条上限 15 秒），按你估的时长切段，段数你定。',
+      '- 先把估算写清楚：正文多少字 / 几个场景 / 几段对白 → 估出总秒数 → 再按每段 4–15 秒切。',
+      '- 然后输出分镜计划，每段一行：段号 | 起止秒 | 这段时间发生什么。',
+    ].join('\n') : [
+      '## 2. 总时长预算（用户已指定）',
+      '- 整片目标总时长 **' + total + ' 秒**（硬上限，不许超）。',
+      '- 每段约 ' + per + ' 秒（4–15 秒之间），按预算算下来大约 **' + est + ' 段**；宁可少写内容也别超总时长。',
+      '- 先输出分镜计划，每段一行：段号 | 起止秒 | 这段时间发生什么。',
+    ].join('\n');
     const lines = [
       '# 任务：把下面的正文改写成 MiniMax H3 六段提示词',
       '',
@@ -1580,10 +1593,7 @@
       text || '（没取到正文：先在酒馆楼层里选一条再点按钮）',
       '"""',
       '',
-      '## 2. 总时长预算（先定这个再分段）',
-      '- 整片目标总时长 **' + total + ' 秒**（硬上限，不许超）。',
-      '- 每段约 ' + per + ' 秒（4–15 秒之间），按预算算下来大约 **' + est + ' 段**；宁可少写内容也别超总时长。',
-      '- 先输出分镜计划，每段一行：段号 | 起止秒 | 这段时间发生什么。',
+      durSection,
       '',
       '## 3. 规划提示词（原样使用）',
       '```',
@@ -1606,15 +1616,17 @@
       '```',
       '',
       '## 7. 交付',
-      '按段号顺序给出全部 [[H3]] 块；最后一行写：共 ' + est + ' 段 / ' + total + ' 秒。',
+      '按段号顺序给出全部 [[H3]] 块；最后一行写：共 N 段 / M 秒（N、M 用你实际算出来的数字）。',
     ];
     return lines.join('\n');
   }
 
   function copyAgentBrief() {
     const t = agentBrief();
-    const total = Math.max(15, Number(S.totalSec || 180));
-    const okMsg = function () { status('ok', '任务书已复制 · ' + t.length + ' 字 · 目标 ' + total + ' 秒（约 ' + Math.round(total / 10) + ' 段）'); };
+    const total = Math.max(0, Number(S.totalSec || 0));
+    const auto = !(total > 0);
+    const est = auto ? 0 : Math.max(1, Math.round(total / 10));
+    const okMsg = function () { status('ok', '任务书已复制 · ' + t.length + ' 字 · ' + (auto ? '总时长由模型判断' : ('目标 ' + total + ' 秒（约 ' + est + ' 段）'))); };
     const fallback = function () {
       try {
         const ta = document.createElement('textarea');
