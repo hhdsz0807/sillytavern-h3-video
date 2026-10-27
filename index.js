@@ -2544,24 +2544,29 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     });
   }
 
-  /* 桥的多端口池：浏览器每个源只开 6 条连接，多端口才能真并发（端口表从 /v1/models 自动探） */
-  let AGENT_POOL = { base: '', urls: [] };
+  /* 桥的多端口池：浏览器每个源只开 6 条连接，多端口才能真并发（端口表从 /v1/models 自动探）
+     只缓存「端口」，不缓存整条 URL——否则先点「探测接口」（走 /v1/models）会把后面的对话请求也带偏到 /v1/models */
+  let AGENT_PORTS = { base: '', ports: [] };
   async function agentPortUrls(fullUrl) {
-    let base = '';
-    try { base = new URL(fullUrl, location.href).origin; } catch (_) { return []; }
-    if (AGENT_POOL.base === base && AGENT_POOL.urls.length) return AGENT_POOL.urls;
-    let urls = [];
+    let base = '', path = '';
     try {
-      const r = await withTimeout(fetch(base + '/v1/models'), 4000, '探桥 ');
-      const j = await r.json();
-      const ports = (j && j.h3 && Array.isArray(j.h3.ports)) ? j.h3.ports : [];
-      const path = String(fullUrl).replace(/^https?:\/\/[^/]+/, '') || '';
-      urls = ports.filter(function (p) { return Number(p) > 0; })
-        .map(function (p) { return base.replace(/:\d+$/, '') + ':' + Number(p) + path; });
-    } catch (_) {}
-    if (!urls.length) urls = [fullUrl];
-    AGENT_POOL = { base: base, urls: urls };
-    return urls;
+      const u = new URL(fullUrl, location.href);
+      base = u.origin;
+      path = (u.pathname || '') + (u.search || '');
+    } catch (_) { return []; }
+    if (AGENT_PORTS.base !== base) {
+      let ports = [];
+      try {
+        const r = await withTimeout(fetch(base + '/v1/models'), 4000, '探桥 ');
+        const j = await r.json();
+        ports = (j && j.h3 && Array.isArray(j.h3.ports)) ? j.h3.ports.filter(function (p) { return Number(p) > 0; }) : [];
+      } catch (_) {}
+      AGENT_PORTS = { base: base, ports: ports };
+    }
+    const urls = (AGENT_PORTS.ports || []).map(function (p) {
+      return base.replace(/:\d+$/, '') + ':' + Number(p) + path;
+    });
+    return urls.length ? urls : [fullUrl];
   }
 
   async function agentHttp(url, bodyStr, method, purpose) {
