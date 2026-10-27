@@ -3577,6 +3577,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       try {
         return await jpost('/api/krea2/run', {
           mode: 't2i',
+          name: s.name,
           prompt: styleText + ', ' + s.prompt + ', no people, clean background, empty scene',
           aspect: '16:9 (Widescreen)',
           mp: 1.5,
@@ -3611,7 +3612,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
           }
           const fullUrl = /^https?:/i.test(file) ? file : api(file);
           const blob = await (await fetch(fullUrl)).blob();
-          const fname = 'scene_' + Date.now() + '_' + i + '.png';
+          const fname = String(s.name || ('场景' + (i + 1))).replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 60) + '.png';
           const up = await fetch(api('/api/upload?name=' + encodeURIComponent(fname) + '&kind=image'), {
             method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
           }).then(r => r.json());
