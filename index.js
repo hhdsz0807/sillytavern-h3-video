@@ -233,7 +233,7 @@
         </div>
         <div id="h3v-segTable"></div>
 
-        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button></div>
+        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button><label style="min-width:auto" title="整片目标总时长（秒），规划/复制给 Agent 都用它">总时长</label><input type="number" id="h3v-totalSec" min="15" max="900" step="15" value="180" style="max-width:74px;flex:none"><button id="h3v-agentcopy" class="primary" style="flex:none" title="把正文 + 规划/六段/修缮提示词 + 16 路并发要求，一次性复制成给 agent 会话的任务书">复制到 Agent 会话</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
   <div class="row">
@@ -405,6 +405,11 @@
     if ($('#h3v-copyAll')) $('#h3v-copyAll').onclick = copyAllPrompts;
     if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
     if ($('#h3v-story')) $('#h3v-story').onclick = showStoryText;
+    if ($('#h3v-totalSec')) {
+      $('#h3v-totalSec').value = String(S.totalSec || 180);
+      $('#h3v-totalSec').onchange = function () { S.totalSec = Math.max(15, Number($('#h3v-totalSec').value) || 180); saveS(); };
+    }
+    if ($('#h3v-agentcopy')) $('#h3v-agentcopy').onclick = copyAgentBrief;
     $('#h3v-run').onclick = runVideo;
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
@@ -1553,6 +1558,74 @@
     if (!el) { LOG(kind, text); return; }
     el.className = 'on ' + kind;
     el.textContent = text;
+  }
+
+  /* 复制到 Agent 会话：正文 + 规划/六段/修缮三套提示词 + 16 路并发要求，一条粘贴即用 */
+  function agentBrief() {
+    const text = storyText();
+    const total = Math.max(15, Number(S.totalSec || 180));
+    const per = 10;
+    const est = Math.max(1, Math.round(total / per));
+    const lines = [
+      '# 任务：把下面的正文改写成 MiniMax H3 六段提示词',
+      '',
+      '## 0. 运行方式（先看这条，别逐段串行）',
+      '- 把每一段当成独立任务，**16 路并发**同时生成：DSH 里用 workflow 工具一次 fan out 16 个子代理；本地/脚本就用 16 个并发 node 进程或 Promise.all(16)。',
+      '- 每段只产出 1 个 [[H3]]…[[/H3]] 块（完整六段），段与段之间空一行。',
+      '- 全部写完后按「6. 修缮」逐段自检，不合格的**只重写那一段**（依旧并发）。',
+      '- 最后按段号顺序合并输出，或写到 D:\\cli\\h3out\\agent-<时间戳>.txt。',
+      '',
+      '## 1. 正文',
+      '"""',
+      text || '（没取到正文：先在酒馆楼层里选一条再点按钮）',
+      '"""',
+      '',
+      '## 2. 总时长预算（先定这个再分段）',
+      '- 整片目标总时长 **' + total + ' 秒**（硬上限，不许超）。',
+      '- 每段约 ' + per + ' 秒（4–15 秒之间），按预算算下来大约 **' + est + ' 段**；宁可少写内容也别超总时长。',
+      '- 先输出分镜计划，每段一行：段号 | 起止秒 | 这段时间发生什么。',
+      '',
+      '## 3. 规划提示词（原样使用）',
+      '```',
+      PLAN_SYS,
+      '```',
+      '',
+      '## 4. 六段提示词规则（原样使用，不许删减）',
+      '```',
+      SIX_SYS,
+      '```',
+      '',
+      '## 5. 镜头硬约束',
+      '- 段长 ≤6s → 1 个 [Shot]；6–12s → 2 个；>12s → 3 个。',
+      '- 每两镜之间至少 4 秒；最后一镜不超过（段长 − 0.5）秒。',
+      '- <Subject N> 全片编号一致；<Picture N> / <Audio N> 只引用素材清单里真实存在的编号。',
+      '',
+      '## 6. 修缮提示词（第一批写完后逐段跑）',
+      '```',
+      String(CHECK_SYS),
+      '```',
+      '',
+      '## 7. 交付',
+      '按段号顺序给出全部 [[H3]] 块；最后一行写：共 ' + est + ' 段 / ' + total + ' 秒。',
+    ];
+    return lines.join('\n');
+  }
+
+  function copyAgentBrief() {
+    const t = agentBrief();
+    const total = Math.max(15, Number(S.totalSec || 180));
+    const okMsg = function () { status('ok', '任务书已复制 · ' + t.length + ' 字 · 目标 ' + total + ' 秒（约 ' + Math.round(total / 10) + ' 段）'); };
+    const fallback = function () {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const r = document.execCommand('copy'); ta.remove();
+        if (r) okMsg(); else status('err', '复制失败，手动全选吧');
+      } catch (e) { status('err', '复制失败：' + ((e && e.message) || e)); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(okMsg).catch(fallback);
+    else fallback();
   }
 
   function copyTemplate() {
