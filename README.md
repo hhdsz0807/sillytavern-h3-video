@@ -4,6 +4,16 @@
 
 **不需要在这里配任何云端 Key**，RunningHub 的 Key/账号都在 H3工作台 里。
 
+## 一键安装（GitHub 地址）
+
+酒馆 → 扩展（Extensions）→ 安装扩展（Install Extension）→ 填：
+
+```
+https://github.com/hhdsz0807/sillytavern-h3-video
+```
+
+装完刷新页面，右下角出现蓝色 🎬 按钮即成功。手机酒馆（Termux）同样适用。
+
 ## 安装（安卓 Termux 跑的酒馆）
 
 1. 把整个 `sillytavern-h3-video` 文件夹放进酒馆的扩展目录：
@@ -22,6 +32,22 @@
    - **场景图**：放最后一张（对应 `<Picture N>`）
    - 时长 / 清晰度 / 步数
 5. 点 **生成视频** → 云端排队 4–7 分钟（0.98MP/15s 实测 71–95 币）→ 面板里直接出片，可下载。
+
+## 27B 通道（用 RunningHub 的 Qwen3.8-27B 当聊天模型）
+
+面板里有一行「27B通道」：
+
+| 控件 | 填什么 |
+|---|---|
+| RunningHub API Key | 你自己的 key（只存本机 localStorage，不上传） |
+| 模型 | `qwen27b-q4`（Huihui-27B-abliterated-Q4_K）或 `qwen27b-q4-uncensored` |
+| 测试通道 | 校验 key + 端点是否通 |
+| 接入酒馆 | 一键把酒馆「聊天补全」切到 `自定义（兼容 OpenAI）`：端点 `http://<H3地址>/v1`、模型 `qwen27b-q4`、密钥填你刚才的 key |
+
+**前提**：那个地址上的 H3工作台要支持 `/v1/chat/completions`（电脑版 `server.js` 已内置）。
+手机 APK 自带的服务端目前只有出片接口，**没有 /v1**；想在手机上用 27B，就把面板顶部「H3 地址」填成电脑的局域网地址（如 `http://192.168.1.3:8899`），走电脑那台。
+
+成本参考：单条回复 20–90 秒、4–20 币；上下文超过约 11,000 字会被保头保尾截断。
 
 ## 让六段块别把聊天撑丑（正则折叠）
 
