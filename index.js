@@ -234,6 +234,15 @@
         </div>
         <div id="h3v-segTable"></div>
 
+<div class="row"><label>27B通道</label>
+<input id="h3v-qwenKey" type="password" placeholder="RunningHub API Key（只存本机 localStorage）" style="flex:1;min-width:200px">
+<select id="h3v-qwenModel" style="max-width:190px;flex:none">
+<option value="qwen27b-q4">27B Q4</option>
+<option value="qwen27b-q4-uncensored">27B Q4 Uncensored</option>
+</select>
+<button id="h3v-qwenTest" style="flex:none">测试通道</button>
+<button id="h3v-qwenLink" class="primary" style="flex:none" title="把酒馆的聊天补全切到本机的 Qwen27B 通道">接入酒馆</button>
+</div>
         <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button><label style="min-width:auto" title="整片目标总时长（秒）；填 0 = 让模型按正文自己判断">总时长</label><input type="number" id="h3v-totalSec" min="0" max="900" step="5" value="0" style="max-width:74px;flex:none" placeholder="0=自动"><button id="h3v-agentcopy" class="primary" style="flex:none" title="把正文 + 规划/六段/修缮提示词 + 16 路并发要求，一次性复制成给 agent 会话的任务书">复制到 Agent 会话</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
@@ -406,6 +415,7 @@
     if ($('#h3v-copyAll')) $('#h3v-copyAll').onclick = copyAllPrompts;
     if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
     if ($('#h3v-story')) $('#h3v-story').onclick = showStoryText;
+    try { initQwenChannel(); } catch (_) {}
     if ($('#h3v-audioReset')) $('#h3v-audioReset').onclick = function () {
       if (!confirm('清空所有角色的音色绑定？之后要重新给角色选音色。')) return;
       S.charAudioMap = {};
@@ -3457,6 +3467,55 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     lines.push('每行：场景名|英文提示词（60–100 单词，必须含 no people, clean background, empty scene）。');
     lines.push('最后单独一行写：共 N 个场景。');
     return lines.join(NL);
+  }
+
+  /* ---------- Qwen3.8-27B（Q4）通道：填 RunningHub key 即可让酒馆用它聊天 ---------- */
+  function qwenKey() { return String(S.qwenKey || '').trim(); }
+  function qwenModel() { return String(S.qwenModel || 'qwen27b-q4'); }
+
+  async function qwenTestChannel() {
+    const key = qwenKey();
+    if (!key) { status('err', '先填 RunningHub API Key'); return; }
+    status('run', '测试通道中…');
+    try {
+      const r = await fetch(api('/v1/models'), { headers: { Authorization: 'Bearer ' + key } });
+      const j = await r.json();
+      const ids = (j.data || []).map(function (m) { return m.id; });
+      if (!ids.length) throw new Error('服务端没返回模型');
+      status('ok', '通道正常 · ' + ids.join(' / ') + ' · 端点 ' + api('/v1'));
+    } catch (e) { status('err', '通道不通：' + ((e && e.message) || e) + '（确认 8899 在工作台上跑着）'); }
+  }
+
+  async function qwenLinkTavern() {
+    const key = qwenKey();
+    if (!key) { status('err', '先填 RunningHub API Key'); return; }
+    const url = api('/v1');
+    let ctx = null;
+    try { ctx = (window.SillyTavern && SillyTavern.getContext) ? SillyTavern.getContext() : null; } catch (_) {}
+    const o = ctx && (ctx.chatCompletionSettings || ctx.oai_settings);
+    if (!o) { status('err', '读不到酒馆的聊天补全设置，请手动填：端点 ' + url + ' · 模型 ' + qwenModel()); return; }
+    try {
+      o.chat_completion_source = 'custom';
+      o.custom_url = url;
+      o.custom_model = qwenModel();
+      if (o && ("custom_prompt_post_processing" in o)) o.custom_prompt_post_processing = "merge";
+      o.proxy_password = key;
+      if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+      status('ok', '已切到 Qwen27B（' + qwenModel() + '）· 端点 ' + url + ' · 现在发一条消息试试');
+    } catch (e) { status('err', '切换失败：' + ((e && e.message) || e)); }
+  }
+
+  function initQwenChannel() {
+    if ($('#h3v-qwenKey')) {
+      $('#h3v-qwenKey').value = S.qwenKey || '';
+      $('#h3v-qwenKey').onchange = function () { S.qwenKey = $('#h3v-qwenKey').value.trim(); saveS(); };
+    }
+    if ($('#h3v-qwenModel')) {
+      $('#h3v-qwenModel').value = qwenModel();
+      $('#h3v-qwenModel').onchange = function () { S.qwenModel = $('#h3v-qwenModel').value; saveS(); };
+    }
+    if ($('#h3v-qwenTest')) $('#h3v-qwenTest').onclick = qwenTestChannel;
+    if ($('#h3v-qwenLink')) $('#h3v-qwenLink').onclick = qwenLinkTavern;
   }
 
   function copySceneBrief() {
