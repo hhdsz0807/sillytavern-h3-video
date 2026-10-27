@@ -2596,7 +2596,8 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         });
         txt = await r.text();
         const throttled = (r.status === 429) || /Too Many Requests|rate limit/i.test(txt);
-        const serverErr = (r.status >= 500);
+        // 5xx 只重试一次：额度不足/模型报错这类别把用户晾在退避里
+        const serverErr = (r.status >= 500) && attempt < 1;
         if (!throttled && !serverErr) break;
       }
       let j = {};
