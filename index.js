@@ -823,11 +823,19 @@
 
   /* ---------- 分段解析 ---------- */
   function parseBlocks(text) {
+    let t = String(text || '').replace(/\r\n/g, '\n');
+    // 容错：闭合标签手写变体 [[/H3]、[/H3]]、[[ / H3 ]] 统一成 [[/H3]]
+    t = t.replace(/\[+\s*\/\s*H3\s*\]+/gi, '[[/H3]]');
     const out = [];
-    const re = /\[\[H3\]\]([\s\S]*?)\[\[\/H3\]\]/g;
-    let m;
-    while ((m = re.exec(text || ''))) out.push(m[1].trim());
-    if (!out.length) { const e = extractPrompt(text); if (e) out.push(e); }
+    const parts = t.split(/\[\[\s*H3\s*\]\]/i);
+    for (let i = 1; i < parts.length; i++) {
+      let seg = parts[i];
+      const close = seg.search(/\[\[\s*\/\s*H3\s*\]\]/i);
+      if (close >= 0) seg = seg.slice(0, close);      // 有闭合就截到闭合
+      seg = seg.replace(/\n*共\s*\d+\s*段[\s\S]*$/i, '').trim();   // 去掉结尾统计行
+      if (seg) out.push(seg);
+    }
+    if (!out.length) { const e = extractPrompt(t); if (e) out.push(e); }
     return out;
   }
 
@@ -1711,7 +1719,7 @@
       '```',
       '',
       '## 7. 交付',
-      '按段号顺序给出全部 [[H3]] 块；最后一行写：共 N 段 / M 秒（N、M 用你实际算出来的数字）。',
+      '按段号顺序给出全部 [[H3]] 块，**每块必须以 [[/H3]] 单独收尾**（漏了这一段就会被酒馆当废块丢掉）；最后一行写：共 N 段 / M 秒（N、M 用你实际算出来的数字）。',
     ];
     return lines.join('\n');
   }
