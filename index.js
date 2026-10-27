@@ -233,7 +233,7 @@
         </div>
         <div id="h3v-segTable"></div>
 
-        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button></div>
+        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
   <div class="row">
@@ -402,6 +402,8 @@
     $('#h3v-mp').onchange = () => { S.mp = $('#h3v-mp').value; saveS(); };
     $('#h3v-del').onchange = () => { S.del = $('#h3v-del').checked; saveS(); };
     $('#h3v-tpl').onclick = copyTemplate;
+    if ($('#h3v-copyAll')) $('#h3v-copyAll').onclick = copyAllPrompts;
+    if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
     $('#h3v-run').onclick = runVideo;
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
@@ -1558,6 +1560,44 @@
         .then(() => status('ok', '模板已复制，粘到角色卡/世界书/作者注释'))
         .catch(() => status('err', '复制失败，手动选吧'));
     } else status('err', '这个浏览器不支持自动复制');
+  }
+
+  /* 复制提示词：onlyIdx 省略 = 全部；给了 = 只复制第 onlyIdx 段（1 起） */
+  function copyPrompts(onlyIdx) {
+    const box = $('#h3v-prompt');
+    const all = String(box ? box.value : '').trim();
+    if (!all) { status('err', '还没有六段提示词：先生成，或先把模型写好的粘进来'); return; }
+    const blocks = parseBlocks(all);
+    let text = all, n = blocks.length || 1;
+    if (onlyIdx) {
+      if (!blocks.length || onlyIdx > blocks.length) { status('err', '没有第 ' + onlyIdx + ' 段'); return; }
+      text = '[[H3]]\n' + String(blocks[onlyIdx - 1]).replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]';
+      n = 1;
+    }
+    const okMsg = function () {
+      status('ok', '已复制 ' + n + ' 段 · ' + text.length + ' 字符' + (n > 1 ? '（整份，含 [[H3]] 标记）' : ''));
+    };
+    const fallback = function () {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        const r = document.execCommand('copy');
+        ta.remove();
+        if (r) okMsg(); else status('err', '复制失败，手动全选吧');
+      } catch (e) { status('err', '复制失败：' + ((e && e.message) || e)); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(okMsg).catch(fallback);
+    } else fallback();
+  }
+  function copyAllPrompts() { copyPrompts(0); }
+  function copyOnePrompt() {
+    const sel = $('#h3v-block');
+    const k = (sel && sel.value !== '' && Number(sel.value) >= 0) ? Number(sel.value) + 1 : 1;
+    copyPrompts(k);
   }
 
   const INJECT = `[H3 视频] 这次回复正文之后，按 MiniMax H3 官方全参考模式（Ref2VA）补一个提示词块：[[H3]] 开头、[[/H3]] 结尾，六段顺序固定 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。
