@@ -3558,7 +3558,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
         });
       } catch (e) {
         const msg = String(e && e.message || '');
-        if (/并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403/i.test(msg) && !STOP_ALL && tries < 12) {
+        if (/并发|busy|并发已满|RUNNING|超时|timeout|Failed to fetch|账号|登录|API Key|未授权|401|403|421|TASK_QUEUE|QUEUE_MAX|队列/i.test(msg) && !STOP_ALL && tries < 12) {
           tries = (tries || 0) + 1;
           const wait = Math.min(30000, 3000 * tries);
           status('run', '场景「' + s.name + '」并发已满，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + ' 次）…');
