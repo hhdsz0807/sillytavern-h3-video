@@ -3132,7 +3132,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
   async function scenePlan() {
     const st = SCENE_STYLE[$('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime'] || SCENE_STYLE.anime;
-    const text = (CURTEXT || lastMessageText() || '').trim();
+    const text = storyText();
     if (!text) { status('err', '没有正文：先点楼层 🎬'); return; }
     status('run', '正在从正文提取场景…');
     try {
@@ -4219,7 +4219,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function charGen() {
-    const text = (CURTEXT || lastMessageText() || '').trim();
+    const text = storyText();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
     jobBegin('补角色四视图');
     pgSet(5);
@@ -4275,7 +4275,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   async function outfitGen() {
-    const text = (CURTEXT || lastMessageText() || '').trim();
+    const text = storyText();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
     if (!CHARLIB.length) { status('err', '角色库是空的，先上传一张四视图'); return; }
     jobBegin('按正文换装');
@@ -4671,7 +4671,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
 
 
   async function genSixOrch() {
-    const text = (CURTEXT || lastMessageText() || '').trim();
+    const text = storyText();
     if (!text) { status('err', '没有正文'); return false; }
     const btn = $('#h3v-gen');
     if (btn) btn.disabled = true;
@@ -4758,7 +4758,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     }
 window.__h3Purpose = 'plan';
     jobBegin('生成六段');
-    const text = (CURTEXT || lastMessageText() || '').trim();
+    const text = storyText();
     if (!text) { status('err', '没有正文：先在楼层点 🎬 打开面板'); return; }
     const btn = $('#h3v-gen');
     btn.disabled = true;
@@ -5111,6 +5111,37 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
   box.style.display = (S.aiMode === 'api' || S.aiMode === 'agent') ? 'block' : 'none';
   }
 
+  /* ---------- 从整楼里抽正文（酒馆楼层常带 logic_check / thinking / status 等大段杂项） ---------- */
+  function stripStoryJunk(s) {
+    let t = String(s || '');
+    t = t.replace(/<htm1fenge>[\s\S]*?<\/htm1fenge>/gi, '');
+    t = t.replace(/<!--[\s\S]*?-->/g, '');
+    t = t.replace(/<(logic_check|thinking|acg_think|anti_protagonist_halo_protocol|butterfly_effect_protocol|meow_FM|special_status|wlog|status|npc_log|parallel_world|branches|UpdateVariable|time_format|bbs_start|bbs_end|story_scene|StatusPlaceHolderImpl)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    return t;
+  }
+  function storyText() {
+    const raw = (CURTEXT || lastMessageText() || '').trim();
+    if (!raw) return '';
+    let body = '';
+    const m = raw.match(/<story_scene>([\s\S]*?)<\/story_scene>/i);
+    if (m) {
+      body = m[1];
+    } else {
+      const at = raw.search(/(^|\n)#{0,3}\s*正文\s*\n/);
+      if (at >= 0) {
+        let rest = raw.slice(at).replace(/^[\s\S]*?正文\s*\n/, '');
+        const cut = rest.search(/<(meow_FM|status|wlog|parallel_world|branches|UpdateVariable)/i);
+        body = cut >= 0 ? rest.slice(0, cut) : rest;
+      } else {
+        body = stripStoryJunk(raw);
+      }
+    }
+    body = stripStoryJunk(body);
+    body = body.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n');
+    body = body.replace(/<[^>]+>/g, '');
+    body = body.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    return body || raw;   // 抽空就退回原文，别把生成搞没
+  }
   /* ---------- 楼层按钮 ---------- */
   function lastMessageText() {
     const list = document.querySelectorAll('#chat .mes');
