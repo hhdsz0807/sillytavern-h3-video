@@ -158,6 +158,7 @@
           <span class="hint" id="h3v-charHint">每张填个中文名；分段提示词只会从这些名字里选</span>
         </div>
         <details id="h3v-charDetails" style="margin:2px 0 10px"><summary id="h3v-charSum" style="cursor:pointer;color:#8b98ab;font-size:13px">角色库（点开）</summary><div id="h3v-charList"></div></details>
+<div class="row" style="margin:-4px 0 10px"><button id="h3v-audioReset" class="sm" style="flex:none" title="清空所有角色的音色绑定（按名字存的表），然后重新逐个选">重置音色绑定</button><span class="hint">音色按角色名绑定；库顺序变了也不会乱</span></div>
 
         <details id="h3v-audDetails" style="margin:2px 0 10px">
           <summary id="h3v-audSum" style="cursor:pointer;color:#8b98ab;font-size:13px">音频库（点开）</summary>
@@ -405,6 +406,15 @@
     if ($('#h3v-copyAll')) $('#h3v-copyAll').onclick = copyAllPrompts;
     if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
     if ($('#h3v-story')) $('#h3v-story').onclick = showStoryText;
+    if ($('#h3v-audioReset')) $('#h3v-audioReset').onclick = function () {
+      if (!confirm('清空所有角色的音色绑定？之后要重新给角色选音色。')) return;
+      S.charAudioMap = {};
+      S.charAudio = [];
+      S.charAudioMigrated = 1;
+      saveS();
+      try { fillCharAudioSelects(); } catch (_) {}
+      status('ok', '音色绑定已清空，逐个重新选即可（按角色名保存，之后不会再乱）');
+    };
     if ($('#h3v-totalSec')) {
       $('#h3v-totalSec').value = String(S.totalSec || 0);
       $('#h3v-totalSec').onchange = function () { S.totalSec = Math.max(0, Number($('#h3v-totalSec').value) || 0); saveS(); };
@@ -952,7 +962,7 @@
   function getCharAudio(name, idx) {
     const k = String(name || '').trim();
     if (k && S.charAudioMap && typeof S.charAudioMap === 'object' && S.charAudioMap[k]) return S.charAudioMap[k];
-    if (typeof idx === 'number' && Array.isArray(S.charAudio)) return S.charAudio[idx] || '';
+    if (!S.charAudioMigrated && typeof idx === 'number' && Array.isArray(S.charAudio)) return S.charAudio[idx] || '';
     return '';
   }
   function setCharAudio(name, val) {
@@ -961,9 +971,10 @@
     if (k && val) S.charAudioMap[k] = val; else if (k) delete S.charAudioMap[k];
     saveS();
   }
-  /* 老数据只有下标数组：按当前库搬一次到名字表，之后一律以名字表为准 */
+  /* 老数据只有下标数组：只迁一次（打标记），之后一律以名字表为准 */
   function migrateCharAudio() {
     if (!S.charAudioMap || typeof S.charAudioMap !== 'object') S.charAudioMap = {};
+    if (S.charAudioMigrated) return;                 // 只迁一次，库顺序变了也不会再污染
     const arr = Array.isArray(S.charAudio) ? S.charAudio : [];
     let moved = 0;
     for (let i = 0; i < CHARLIB.length && i < arr.length; i++) {
@@ -971,7 +982,9 @@
       if (!nm || !arr[i]) continue;
       if (!S.charAudioMap[nm]) { S.charAudioMap[nm] = arr[i]; moved++; }
     }
-    if (moved) { try { saveS(); } catch (_) {} LOG('audio: 迁移 ' + moved + ' 条下标绑定到名字'); }
+    S.charAudioMigrated = 1;
+    try { saveS(); } catch (_) {}
+    if (moved) LOG('audio: 一次性迁移 ' + moved + ' 条下标绑定到名字');
   }
 
   function charAudioFor(file) {
