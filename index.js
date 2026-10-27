@@ -822,6 +822,16 @@
   }
 
   /* ---------- 分段解析 ---------- */
+  /* 一段是否像正经六段块（用来踢掉正文里偶然出现的 [[H3]] 字样） */
+  const SIX_KEYS = ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'overall_soundscape', 'non_diegetic_music'];
+  function looksLikeBlock(seg) {
+    const s = String(seg || '');
+    let hit = 0;
+    for (let i = 0; i < SIX_KEYS.length; i++) {
+      if (new RegExp('(^|\\n)\\s*' + SIX_KEYS[i] + '\\s*:', 'i').test(s)) hit++;
+    }
+    return hit >= 2 || /detailed_description\s*:/i.test(s);
+  }
   function parseBlocks(text) {
     let t = String(text || '').replace(/\r\n/g, '\n');
     // 容错：闭合标签手写变体 [[/H3]、[/H3]]、[[ / H3 ]] 统一成 [[/H3]]
@@ -833,7 +843,9 @@
       const close = seg.search(/\[\[\s*\/\s*H3\s*\]\]/i);
       if (close >= 0) seg = seg.slice(0, close);      // 有闭合就截到闭合
       seg = seg.replace(/\n*共\s*\d+\s*段[\s\S]*$/i, '').trim();   // 去掉结尾统计行
-      if (seg) out.push(seg);
+      if (!seg) continue;
+      if (!looksLikeBlock(seg)) continue;             // 「[[H3]] 块怎么写」这类说明文字不算
+      out.push(seg);
     }
     if (!out.length) { const e = extractPrompt(t); if (e) out.push(e); }
     return out;
@@ -1686,7 +1698,8 @@
       '## 0. 运行方式（先看这条，别逐段串行）',
       '- 把每一段当成独立任务，**16 路并发**同时生成：DSH 里用 workflow 工具一次 fan out 16 个子代理；本地/脚本就用 16 个并发 node 进程或 Promise.all(16)。',
       '- 每段只产出 1 个 [[H3]]…[[/H3]] 块（完整六段），段与段之间空一行。',
-      '- 全部写完后按「6. 修缮」逐段自检，不合格的**只重写那一段**（依旧并发）。',
+      '- **必须**：第一批全部写完后，按「6. 修缮」逐段自检一遍（六段齐全/英文/人名中文/[Shot 1] 不带时间戳/Subject 连续编号/Picture 编号一致/末镜 ≤14.5s/CAST 行），不合格的**只重写那一段**（依旧并发）。',
+      '- 交付的是**修缮后的最终版**，不要把初稿直接交出来。',
       '- 最后按段号顺序合并输出，或写到 D:\\cli\\h3out\\agent-<时间戳>.txt。',
       '',
       '> ⚠️ **只认本任务书里的「1. 正文」**：这个会话里之前贴过的正文、分段方案、段数（比如某版 27 段）一律作废，按这段正文重新分段，不要拿旧方案套新正文。',
@@ -1719,7 +1732,8 @@
       '```',
       '',
       '## 7. 交付',
-      '按段号顺序给出全部 [[H3]] 块，**每块必须以 [[/H3]] 单独收尾**（漏了这一段就会被酒馆当废块丢掉）；最后一行写：共 N 段 / M 秒（N、M 用你实际算出来的数字）。',
+      '按段号顺序给出全部 [[H3]] 块，**每块必须以 [[/H3]] 单独收尾**（漏了这一段就会被酒馆当废块丢掉）。',
+      '最后两行分别写：共 N 段 / M 秒（用你实际算出来的数字）、已按修缮规则自检 N 段，重写 M 段。',
     ];
     return lines.join('\n');
   }
