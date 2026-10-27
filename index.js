@@ -958,7 +958,7 @@
   }
 
   /* 音色绑定按「角色名」存，不再按 CHARLIB 下标（库一重排、新增角色，下标就错位） */
-  function audioKeyOf(a) { return String((a && a.name) || '').trim(); }
+  function audioKeyOf(a) { return String((a && (a.file || a.name)) || '').trim(); }
   function getCharAudio(name, idx) {
     const k = String(name || '').trim();
     if (k && S.charAudioMap && typeof S.charAudioMap === 'object' && S.charAudioMap[k]) return S.charAudioMap[k];
@@ -972,7 +972,23 @@
     saveS();
   }
   /* 老数据只有下标数组：只迁一次（打标记），之后一律以名字表为准 */
+  /* 名字键 → 文件名键（一次性），避免改名后丢绑定 */
+  function rekeyCharAudio() {
+    if (S.charAudioKeyV2) return;
+    const map = (S.charAudioMap && typeof S.charAudioMap === 'object') ? S.charAudioMap : {};
+    const out = {};
+    Object.keys(map).forEach(function (k) {
+      const v = map[k];
+      const hit = CHARLIB.find(function (c) { return String(c.name || '') === k || String(c.file || '') === k; });
+      out[hit ? audioKeyOf(hit) : k] = v;
+    });
+    S.charAudioMap = out;
+    S.charAudioKeyV2 = 1;
+    try { saveS(); } catch (_) {}
+  }
+
   function migrateCharAudio() {
+    try { rekeyCharAudio(); } catch (_) {}
     if (!S.charAudioMap || typeof S.charAudioMap !== 'object') S.charAudioMap = {};
     if (S.charAudioMigrated) return;                 // 只迁一次，库顺序变了也不会再污染
     const arr = Array.isArray(S.charAudio) ? S.charAudio : [];
@@ -4641,8 +4657,9 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       }).join('');
       sel.value = cur;
       sel.onchange = function () {
-        if (!Array.isArray(S.charAudio)) S.charAudio = ['', '', '', '', '', ''];
-        S.charAudio[i] = sel.value; saveS();
+        const a = CHARLIB[i];
+        setCharAudio(audioKeyOf(a), sel.value);
+        if (a) status('ok', '音色已绑定到「' + (a.name || a.file) + '」');
       };
     });
   }
