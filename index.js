@@ -233,7 +233,7 @@
         </div>
         <div id="h3v-segTable"></div>
 
-        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button></div>
+        <div class="row"><label>六段提示词</label><button id="h3v-tpl" style="flex:none">复制模板</button><button id="h3v-copyAll" style="flex:none" title="把提示词框里的所有六段（多段一起）复制到剪贴板">复制全部六段</button><button id="h3v-copyOne" style="flex:none" title="复制第 1 段（下面「分段」里选中的那条）">复制本段</button><button id="h3v-story" style="flex:none" title="看这一楼真正发给模型的正文（已剥掉 logic_check / thinking / status 等整楼杂项）">看正文</button></div>
         <textarea id="h3v-prompt" placeholder="点楼层里的 🎬 会自动抓 [[H3]]…[[/H3]]；也可以直接粘贴"></textarea>
 
   <div class="row">
@@ -404,6 +404,7 @@
     $('#h3v-tpl').onclick = copyTemplate;
     if ($('#h3v-copyAll')) $('#h3v-copyAll').onclick = copyAllPrompts;
     if ($('#h3v-copyOne')) $('#h3v-copyOne').onclick = copyOnePrompt;
+    if ($('#h3v-story')) $('#h3v-story').onclick = showStoryText;
     $('#h3v-run').onclick = runVideo;
     if ($('#h3v-accExport')) $('#h3v-accExport').onclick = accExport;
     if ($('#h3v-accImport')) $('#h3v-accImport').onclick = accImport;
@@ -1598,6 +1599,43 @@
     const sel = $('#h3v-block');
     const k = (sel && sel.value !== '' && Number(sel.value) >= 0) ? Number(sel.value) + 1 : 1;
     copyPrompts(k);
+  }
+
+  /* 看正文：把这一楼真正会发给模型的文本摊出来（已剥掉 logic_check / thinking / status 等） */
+  function showStoryText() {
+    const t = storyText();
+    if (!t) { status('err', '没取到正文：先在楼层下拉里选一条，或点楼层里的 🎬'); return; }
+    let box = $('#h3v-storyview');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'h3v-storyview';
+      box.style.cssText = 'position:absolute;inset:0;z-index:9;display:none;flex-direction:column;gap:10px;' +
+        'padding:14px;background:rgba(6,10,16,.94);';
+      box.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;flex:none">' +
+        '<b style="font-size:14px">发给模型的正文</b>' +
+        '<span id="h3v-storylen" style="color:#7d8b9b;font-size:12px"></span>' +
+        '<span style="flex:1"></span>' +
+        '<button id="h3v-storycopy" class="sm" style="flex:none">复制正文</button>' +
+        '<button id="h3v-storyx" class="sm" style="flex:none">关闭 ✕</button>' +
+        '</div>' +
+        '<div style="flex:none;color:#7d8b9b;font-size:12px">下面是剥离后的纯正文（含内心话），状态栏/推演/变量更新/界面 HTML 都不会发给模型。</div>' +
+        '<textarea id="h3v-storyta" readonly style="flex:1;min-height:0;width:100%;resize:none;' +
+        'font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap"></textarea>';
+      $('#h3v-dlg').appendChild(box);
+      $('#h3v-storyx').onclick = function () { box.style.display = 'none'; };
+      $('#h3v-storycopy').onclick = function () {
+        const v = $('#h3v-storyta').value || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(v).then(function () { status('ok', '正文已复制 · ' + v.length + ' 字'); })
+            .catch(function () { status('err', '复制失败，手动全选吧'); });
+        } else status('err', '这个浏览器不支持自动复制');
+      };
+    }
+    $('#h3v-storyta').value = t;
+    const raw = (CURTEXT || lastMessageText() || '').trim();
+    $('#h3v-storylen').textContent = t.length + ' 字 / 整楼 ' + raw.length + ' 字（剥掉 ' + Math.max(0, raw.length - t.length) + ' 字）';
+    box.style.display = 'flex';
   }
 
   const INJECT = `[H3 视频] 这次回复正文之后，按 MiniMax H3 官方全参考模式（Ref2VA）补一个提示词块：[[H3]] 开头、[[/H3]] 结尾，六段顺序固定 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music。
