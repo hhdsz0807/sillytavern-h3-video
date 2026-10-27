@@ -4821,7 +4821,13 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         let out = '';
         try { out = await callAI(SIX_SYS + shotRule(sec), user, 3000, LANE_PURPOSE); } catch (e) { LAST_SEG_ERR = String(e && e.message || e); LOG('seg fail', i, e); status('err', '第 ' + (i + 1) + ' 段调用失败：' + LAST_SEG_ERR.slice(0, 120)); }
         let b = extractPrompt(out);
-        if (!b) b = String(out || '').trim();
+        // 只有真的像六段才认（进程事件流/报错 JSON 不许当提示词存下来）
+        if (!b && /subject_definitions\s*:/i.test(String(out || ''))) b = String(out || '').trim();
+        if (!b) {
+          LAST_SEG_ERR = '模型没给出六段';
+          status('err', '第 ' + (i + 1) + ' 段没拿到六段：' + String(out || '(空)').replace(/\s+/g, ' ').slice(0, 100));
+          return null;
+        }
         LAST_SEG_OUT = String(out || '').slice(0, 400);
         if (b && !/<Picture\s*\d/i.test(b)) {
           try {
@@ -4937,7 +4943,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
         const parts = [{ k: i, sec: secA, txt: got[0] || '' }, { k: j, sec: secB, txt: got[1] || '' }];
         for (let t = 0; t < parts.length; t++) {
           const p = parts[t];
-          if (!p.txt || !/<Picture\s*\d/i.test(p.txt)) {
+          if (!p.txt || !/<Picture\s*\d/i.test(p.txt) || !/subject_definitions\s*:/i.test(p.txt)) {
             LOG('pair fallback', p.k + 1, p.txt ? 'no-picture' : 'no-block');
             await genOne(p.k);   // 退回单段（自带 Picture 重写）
             continue;
