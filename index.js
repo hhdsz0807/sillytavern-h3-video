@@ -3813,6 +3813,14 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     if (STAGED[name]) return STAGED[name];
     const e = libEntryOf(name);
     if (!e || !e.libUrl) return name;          // 已经是服务端在册的名字（ui_…）直接过
+    // 服务端能直接读到酒馆三库就不必上传（8899 的 /api/asset/resolve）
+    try {
+      const chk = await fetch(api('/api/asset/resolve?name=' + encodeURIComponent(name)));
+      if (chk.ok) {
+        const cj = await chk.json();
+        if (cj && cj.ok) { STAGED[name] = name; return name; }
+      }
+    } catch (_) {}
     try {
       const r = await withTimeout(fetch(e.libUrl), 30000, '取库文件 ');
       if (!r.ok) throw new Error('库文件 HTTP ' + r.status);
