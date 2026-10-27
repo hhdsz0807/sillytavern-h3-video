@@ -1181,7 +1181,9 @@
   function semCap() {
     const pool = cloudAccPool();
     const sum = pool.reduce(function (a, c) { return a + Math.max(1, Number(c.maxConc || c.conc || 1)); }, 0);
-    return Math.max(1, sum || 1);
+    // 插件里没导入账号时别把信号量卡成 1（那是「一小时一条都没发出去」的元凶）
+    if (!sum) return Math.max(1, Number(S.videoConc || 1));
+    return Math.max(1, sum);
   }
   function semAcquire() {
     const cap = semCap();
@@ -1208,7 +1210,7 @@
 
   async function cloudVideo(opts) {
     const pool = cloudAccPool();
-    if (!pool.length) throw new Error('没有可用账号：导入的账号里没有 API Key（在「H3账号 → 导入账号」重新导入带 Key 的）');
+    if (!pool.length) throw new Error('「云端直连」开着，但插件里没导入账号。要么在「H3账号 → 导入账号」导入，要么取消勾选「云端直连」走 8899 的账号池（那边已配好 4 个账号）');
 
     await semAcquire();
     try {
