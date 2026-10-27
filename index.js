@@ -947,10 +947,37 @@
     });
   }
 
+  /* 音色绑定按「角色名」存，不再按 CHARLIB 下标（库一重排、新增角色，下标就错位） */
+  function audioKeyOf(a) { return String((a && a.name) || '').trim(); }
+  function getCharAudio(name, idx) {
+    const k = String(name || '').trim();
+    if (k && S.charAudioMap && typeof S.charAudioMap === 'object' && S.charAudioMap[k]) return S.charAudioMap[k];
+    if (typeof idx === 'number' && Array.isArray(S.charAudio)) return S.charAudio[idx] || '';
+    return '';
+  }
+  function setCharAudio(name, val) {
+    const k = String(name || '').trim();
+    if (!S.charAudioMap || typeof S.charAudioMap !== 'object') S.charAudioMap = {};
+    if (k && val) S.charAudioMap[k] = val; else if (k) delete S.charAudioMap[k];
+    saveS();
+  }
+  /* 老数据只有下标数组：按当前库搬一次到名字表，之后一律以名字表为准 */
+  function migrateCharAudio() {
+    if (!S.charAudioMap || typeof S.charAudioMap !== 'object') S.charAudioMap = {};
+    const arr = Array.isArray(S.charAudio) ? S.charAudio : [];
+    let moved = 0;
+    for (let i = 0; i < CHARLIB.length && i < arr.length; i++) {
+      const nm = audioKeyOf(CHARLIB[i]);
+      if (!nm || !arr[i]) continue;
+      if (!S.charAudioMap[nm]) { S.charAudioMap[nm] = arr[i]; moved++; }
+    }
+    if (moved) { try { saveS(); } catch (_) {} LOG('audio: 迁移 ' + moved + ' 条下标绑定到名字'); }
+  }
+
   function charAudioFor(file) {
     if (!file) return '';
     for (let i = 0; i < CHARLIB.length; i++) {
-      if (CHARLIB[i].file === file) return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
+      if (CHARLIB[i].file === file) return getCharAudio(audioKeyOf(CHARLIB[i]), i);
     }
     return '';
   }
@@ -3603,7 +3630,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       const nm = String(CHARLIB[i].name || '').replace(/\s+/g, '');
       if (!nm) continue;
       if (nm === want || want.includes(nm) || nm.includes(want)) {
-        return (Array.isArray(S.charAudio) ? (S.charAudio[i] || '') : '');
+        return getCharAudio(audioKeyOf(CHARLIB[i]), i);
       }
     }
     return '';
@@ -3765,7 +3792,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     const scenes = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
     const voiced = [];
     for (let i = 0; i < CHARLIB.length; i++) {
-      const a = (Array.isArray(S.charAudio) ? S.charAudio[i] : '');
+      const a = getCharAudio(audioKeyOf(CHARLIB[i]), i);
       if (a && CHARLIB[i].name) voiced.push(CHARLIB[i].name);
     }
     let text = '';
@@ -4589,12 +4616,13 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
   }
 
   function fillCharAudioSelects() {
+    try { migrateCharAudio(); } catch (_) {}
     const box = $('#h3v-charList');
     if (!box) return;
     box.querySelectorAll('select[data-ca]').forEach(function (sel) {
       const i = Number(sel.dataset.ca);
       if (!CHARLIB[i]) return;
-      const cur = (Array.isArray(S.charAudio) ? S.charAudio[i] : '') || '';
+      const cur = getCharAudio(audioKeyOf(CHARLIB[i]), i) || '';
       sel.innerHTML = '<option value="">音色：无</option>' + AUDIOLIB.map(function (a) {
         return '<option value="' + esc(a.file) + '">' + esc(a.name || a.file) + '</option>';
       }).join('');
