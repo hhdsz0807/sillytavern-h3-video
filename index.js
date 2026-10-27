@@ -1519,17 +1519,17 @@
         jobLabel('批量 · 第 ' + (i + 1) + '/' + blocks.length + ' 条（' + sec + 's）');
         try {
           let id = null, tries = 0;
-          while (tries < 30) {
+          while (tries < 3) {
             try {
               id = await submitBlock(blocks[i], sec, SEGCFG[i], SEGIMG[i]);
               break;
             } catch (e) {
               const m = String(e && e.message || '');
-              if (RETRY_RE.test(m) && !STOP_ALL && tries < 30) {
+              if (RETRY_RE.test(m) && !STOP_ALL && tries < 3) {
                 tries = (tries || 0) + 1;
-                const wait = Math.min(45000, 3000 + 1500 * tries);
+                const wait = Math.min(6000, 2000 + 1000 * tries);
                 const why = /TASK_QUEUE|421|队列/i.test(m) ? '云端队列已满（账号并发上限）' : '提交被挡（并发/限流）';
-                status('run', '第 ' + (i + 1) + ' 条' + why + '，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + '/30 次）…');
+                status('run', '第 ' + (i + 1) + ' 条' + why + '，' + Math.round(wait / 1000) + ' 秒后重试（第 ' + tries + '/3 次）…');
                 await sleep(wait);
                 continue;
               }
