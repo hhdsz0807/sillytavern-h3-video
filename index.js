@@ -188,7 +188,7 @@
 
         <div class="row"><label>场景</label>
           <button id="h3v-scenePlan" style="flex:none">按正文出场景提示词</button>
-          <button id="h3v-sceneGen" style="flex:none">生成全部场景</button>
+<button id="h3v-sceneGen" style="flex:none">生成全部场景</button><button id="h3v-sceneAgent" style="flex:none" title="把正文 + 场景提示词规则 + 16 路并发要求复制成任务书，粘到 agent 会话里写场景">复制场景到 Agent</button>
           <span class="hint" id="h3v-sceneState"></span>
         </div>
         <div class="row"><label>画风</label>
@@ -637,6 +637,7 @@
     renderCharList();
     renderSceneListBox();
     if ($('#h3v-scenePlan')) $('#h3v-scenePlan').onclick = scenePlan;
+    if ($('#h3v-sceneAgent')) $('#h3v-sceneAgent').onclick = copySceneBrief;
     if ($('#h3v-sceneGen')) $('#h3v-sceneGen').onclick = sceneGen;
     if ($('#h3v-sceneLib')) {
       $('#h3v-sceneLib').onchange = sceneLibPreview;
@@ -3369,6 +3370,61 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
     } catch (e) { status('err', '提取失败：' + e.message); }
   }
 
+  /* 场景提示词任务书：正文 + 画风 + 已有场景 + 规则 + 并发，粘到 agent 会话直接用 */
+  function sceneBrief() {
+    const text = storyText();
+    const st = SCENE_STYLE[$('#h3v-sceneStyle') ? $('#h3v-sceneStyle').value : 'anime'] || SCENE_STYLE.anime;
+    const existNames = SCENES.map(function (s) { return String(s.name || '').trim(); }).filter(Boolean);
+    const NL = String.fromCharCode(10);
+    const lines = [
+      '# 任务：从正文里提取场景，写英文场景图提示词',
+      '',
+      '## 0. 运行方式',
+      '- 场景最多 6 个；要一次写多个就用 **16 路并发**分别写（DSH 里用 workflow 一次 fan out 16 个子代理），格式必须一致。',
+      '- 只输出「场景名|英文提示词」每行一条，不要编号、不要解释、不要代码块。',
+      '- 写完把结果整段贴回酒馆面板「每行一个场景」的框里，点「生成全部场景」。',
+      '',
+      '## 1. 正文',
+      '"""',
+      text || '（没取到正文：先在酒馆楼层里选一条再点按钮）',
+      '"""',
+      '',
+      '## 2. 画风要求（必须统一）',
+      '- ' + st,
+      '',
+    ];
+    if (existNames.length) {
+      lines.push('## 3. 已有场景（能对上就照抄这些名字，不要重复造）');
+      existNames.forEach(function (n) { lines.push('- ' + n); });
+      lines.push('');
+    }
+    lines.push('## 4. 规则（原样执行）');
+    lines.push('```');
+    lines.push(SCENE_SYS);
+    lines.push('```');
+    lines.push('');
+    lines.push('## 5. 交付');
+    lines.push('每行：场景名|英文提示词（60–100 单词，必须含 no people, clean background, empty scene）。');
+    lines.push('最后单独一行写：共 N 个场景。');
+    return lines.join(NL);
+  }
+
+  function copySceneBrief() {
+    const t = sceneBrief();
+    const okMsg = function () { status('ok', '场景任务书已复制 · ' + t.length + ' 字（正文 + 画风 + 规则 + 16 路并发）'); };
+    const fallback = function () {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const r = document.execCommand('copy'); ta.remove();
+        if (r) okMsg(); else status('err', '复制失败');
+      } catch (e) { status('err', '复制失败：' + ((e && e.message) || e)); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(okMsg).catch(fallback);
+    else fallback();
+  }
+
   /* ---------- 浏览器本地文件库（脱离 APK 用） ---------- */
   const IDB = (function () {
     let dbp = null;
@@ -5571,6 +5627,7 @@ non_diegetic_music:
       'h3v-mesReload': 'fillMesSel',
       'h3v-gen': 'genSix',
       'h3v-scenePlan': 'scenePlan',
+    'h3v-sceneAgent': 'copySceneBrief',
       'h3v-sceneGen': 'sceneGen',
       'h3v-runAll': 'runAllBlocks',
       'h3v-runRange': 'runRange',
