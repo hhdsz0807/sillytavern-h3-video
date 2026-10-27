@@ -658,6 +658,7 @@
       CURMESID = (mesid === undefined || mesid === null) ? null : String(mesid);
     try { fillMesSel(CURMESID); } catch (e) { try { console.warn('[h3v] fillMesSel', e); } catch (_) {} }
       reloadLibsIfCardChanged();
+      try { syncBlocks(); } catch (_) {}
       const savedB = loadBlocks(CURMESID || 'last');
       const ex = extractPrompt(t);
       if (savedB) { $('#h3v-prompt').value = savedB; status('ok', '已载入这条之前保存的六段提示词'); }
@@ -847,16 +848,69 @@
     try { const o = JSON.parse(localStorage.getItem('h3v.blocks') || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; }
   })();
   let SAVE_T = null;
+
+  /* 楼层绑定：localStorage 按聊天分库，同时写进聊天 metadata（跟着聊天走，清缓存也不丢） */
+  function h3vChatKey() {
+    try {
+      const c = window.SillyTavern.getContext();
+      const v = (typeof c.getCurrentChatId === 'function') ? c.getCurrentChatId() : c.chatId;
+      return String(v || 'chat');
+    } catch (_) { return 'chat'; }
+  }
+  function h3vMetaBlocks() {
+    try {
+      const c = window.SillyTavern.getContext();
+      if (!c || !c.chatMetadata) return null;
+      if (!c.chatMetadata.h3v_blocks || typeof c.chatMetadata.h3v_blocks !== 'object') c.chatMetadata.h3v_blocks = {};
+      return c.chatMetadata.h3v_blocks;
+    } catch (_) { return null; }
+  }
+  function h3vPersistMeta(rec, key) {
+    try {
+      const c = window.SillyTavern.getContext();
+      const mb = (c.chatMetadata && c.chatMetadata.h3v_blocks) || {};
+      if (rec === null) delete mb[key]; else mb[key] = rec;
+      // 正式接口：updateChatMetadata 直接写进聊天文件（saveMetadataDebounced 在没选中聊天时是空操作）
+      if (typeof c.updateChatMetadata === 'function') {
+        c.updateChatMetadata(function (m) { if (m && typeof m === 'object') m.h3v_blocks = mb; });
+      } else if (typeof c.saveMetadataDebounced === 'function') {
+        c.saveMetadataDebounced();
+      }
+    } catch (_) {}
+  }
+  function syncBlocks() {
+    try {
+      const raw = JSON.parse(localStorage.getItem('h3v.blocks.' + h3vChatKey()) || '{}');
+      Object.keys(raw || {}).forEach(function (k) {
+        const v = raw[k];
+        if (v && v.text && (!BLOCKS[k] || (v.ts || 0) > (BLOCKS[k].ts || 0))) BLOCKS[k] = v;
+      });
+    } catch (_) {}
+    const mb = h3vMetaBlocks();
+    if (mb) Object.keys(mb).forEach(function (k) {
+      const v = mb[k];
+      if (v && v.text && (!BLOCKS[k] || (v.ts || 0) > (BLOCKS[k].ts || 0))) BLOCKS[k] = v;
+    });
+  }
+  function clearBlocksMem() { Object.keys(BLOCKS).forEach(function (k) { delete BLOCKS[k]; }); }
+
   function saveBlocks(id, text) {
     if (id === null || id === undefined || id === '') id = 'last';
-    BLOCKS[String(id)] = { text: String(text || ''), ts: Date.now() };
+    const key = String(id);
+    const rec = { text: String(text || ''), ts: Date.now() };
+    BLOCKS[key] = rec;
+    h3vPersistMeta(rec, key);
     clearTimeout(SAVE_T);
     SAVE_T = setTimeout(function () {
-      try { localStorage.setItem('h3v.blocks', JSON.stringify(BLOCKS)); } catch (e) { LOG('save blocks fail', e); }
+      try { localStorage.setItem('h3v.blocks.' + h3vChatKey(), JSON.stringify(BLOCKS)); } catch (e) { LOG('save blocks fail', e); }
     }, 300);
   }
   function loadBlocks(id) {
-    const v = BLOCKS[String(id)];
+    const key = String(id === null || id === undefined || id === '' ? 'last' : id);
+    const mb = h3vMetaBlocks();
+    const mv = mb && mb[key];
+    if (mv && mv.text) return mv.text;
+    const v = BLOCKS[key];
     return v && v.text ? v.text : '';
   }
 
@@ -4639,6 +4693,7 @@ Sparse solo piano at a slow tempo around 60 BPM, soft sustained low notes with l
       }
       if (!blocks.length) throw new Error('子代理没写出文件（检查 ' + dir + '）');
       $('#h3v-prompt').value = blocks.map(function (b) { return '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]'; }).join('\n\n');
+      try { saveBlocks(CURMESID, $('#h3v-prompt').value); } catch (_) {}
       refreshBlockList();
       pgSet(100);
       status(missing ? 'err' : 'ok', '单请求编排完成：' + blocks.length + '/' + segs.length + ' 段'
@@ -4960,6 +5015,7 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
 
 
       $('#h3v-prompt').value = blocks.map(b => '[[H3]]\n' + b.replace(/^\[\[H3\]\]|\[\/H3\]$/g, '').trim() + '\n[[/H3]]').join('\n\n');
+      try { saveBlocks(CURMESID, $('#h3v-prompt').value); } catch (_) {}
       if (S.autoQc) { try { await qcFix(true); } catch (_) {} }
       refreshBlockList();
       pgSet(100);
@@ -5217,7 +5273,7 @@ non_diegetic_music:
       const ctx = window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null;
       if (ctx && ctx.eventSource && ctx.eventTypes) {
         ctx.eventSource.on(ctx.eventTypes.MESSAGE_RENDERED, () => setTimeout(attachMessageButtons, 120));
-        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => { setTimeout(attachMessageButtons, 300); setTimeout(function () { try { reloadLibsIfCardChanged(true); } catch (_) {} }, 400); setTimeout(() => applyInjection(false), 400); });
+        ctx.eventSource.on(ctx.eventTypes.CHAT_CHANGED, () => { try { clearBlocksMem(); } catch (_) {} setTimeout(attachMessageButtons, 300); setTimeout(function () { try { reloadLibsIfCardChanged(true); } catch (_) {} }, 400); setTimeout(() => applyInjection(false), 400); });
       }
       applyInjection(false);
       const chat = document.getElementById('chat');
