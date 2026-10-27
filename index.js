@@ -5233,37 +5233,96 @@ const artCtx = (castText ? ('\n\n【角色造型设定（必须沿用）】\n' +
     if (!box) return;
   box.style.display = (S.aiMode === 'api' || S.aiMode === 'agent') ? 'block' : 'none';
   }
-
-  /* ---------- 从整楼里抽正文（酒馆楼层常带 logic_check / thinking / status 等大段杂项） ---------- */
+  /* ---------- 从整楼里抽正文（酒馆楼层常带 logic_check / thinking / status / 界面 HTML 等大段杂项） ---------- */
+  const BLOCK_TAGS = 'logic_check|thinking|acg_think|anti_protagonist_halo_protocol|butterfly_effect_protocol|meow_FM|special_status|wlog|status|npc_log|parallel_world|branches|UpdateVariable|time_format|bbs_start|bbs_end|story_scene|StatusPlaceHolderImpl|htm1fenge';
   function stripStoryJunk(s) {
     let t = String(s || '');
-    t = t.replace(/<htm1fenge>[\s\S]*?<\/htm1fenge>/gi, '');
+    t = t.replace(new RegExp('<(' + BLOCK_TAGS + ')[^>]*>[\\s\\S]*?<\\/\\1>', 'gi'), '');
+    t = t.replace(new RegExp('<(' + BLOCK_TAGS + ')[^>]*>[\\s\\S]*$', 'i'), '');
     t = t.replace(/<!--[\s\S]*?-->/g, '');
-    t = t.replace(/<(logic_check|thinking|acg_think|anti_protagonist_halo_protocol|butterfly_effect_protocol|meow_FM|special_status|wlog|status|npc_log|parallel_world|branches|UpdateVariable|time_format|bbs_start|bbs_end|story_scene|StatusPlaceHolderImpl)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    return t;
+  }
+  /* 楼层末尾那些装饰小节（有的没包标签，只剩文字） */
+  const TAIL_MARKS = [/Date\s*Summary/i, /世界运行报告/, /玩家状态栏/, /NPC\s*小剧场/i, /Parallel\s*World/i, /变量更新/, /<htm1fenge/i, /StatusPlaceHolder/i, /^\s*⊹/m];
+  function cutTailJunk(body) {
+    const src = String(body || '');
+    let cut = -1;
+    for (let k = 0; k < TAIL_MARKS.length; k++) {
+      const m = src.search(TAIL_MARKS[k]);
+      if (m >= 0 && (cut < 0 || m < cut)) cut = m;
+    }
+    return cut > src.length * 0.25 ? src.slice(0, cut) : src;
+  }
+  /* 段落级判断：界面文字、状态栏、装饰标题一律丢 */
+  const PARA_JUNK = /(VPN\s*:?\s*OFF|🔑|📶|🔋|creator\.|已发布字数|稿费签约|最新上传章节|大文豪ネット|Date\s*Summary|世界运行报告|玩家状态栏|NPC\s*小剧场|Parallel\s*World|变量更新|^\s*[⊹⋆☾☽◆]|JUDGMENT|acg角色心理模型)/i;
+  function isJunkPara(p) {
+    const s = String(p || '').trim();
+    if (!s) return true;
+    if (PARA_JUNK.test(s)) return true;
+    const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
+    if (cjk >= 15) return false;                                  // 像正经正文
+    if (cjk >= 6 && /[。！？…”」』】]/.test(s)) return false;      // 短但像对白/短句
+    return cjk < 10;                                              // 太短又没标点 → 当杂项
+  }
+  function isLeadMeta(p) {
+    const s = String(p || '').trim();
+    if (!s) return true;
+    if (PARA_JUNK.test(s)) return true;
+    if (/\d{4}\s*年\s*\d{1,2}\s*月/.test(s) && !/[。！？]/.test(s)) return true;
+    if (/\d{1,2}:\d{2}\s*[-–~]\s*\d{1,2}:\d{2}/.test(s) && !/[。！？]/.test(s)) return true;
+    if (/[·|]/.test(s) && !/[。！？]/.test(s) && (s.match(/[\u4e00-\u9fa5]/g) || []).length < 30) return true;
+    return false;
+  }
+  /* innerText 被压成一行时：按句号与杂项标记炸成多行，后面逐行过滤 */
+  function explodeLines(s) {
+    let x = String(s || '');
+    x = x.replace(/([。！？])\s*(?![」』】])/g, '$1\n');
+    x = x.replace(/(?=🔑|📶|🔋|⊹|JUDGMENT|Date\\s*Summary|世界运行报告|玩家状态栏|NPC\\s*小剧场|Parallel\\s*World|变量更新|acg角色心理模型)/g, '\n');
+    return x;
+  }
+  function cleanOneLine(s) {
+    let t = String(s || '');
+    t = t.replace(/^[\s\S]{0,400}?(?=[\u4e00-\u9fa5][^。]{18,}?。)/, '');            // 顶部装饰+元信息
+    t = t.replace(/(🔑|VPN\s*:?\s*OFF|📶|🔋)[\s\S]{0,800}?[。！？](?![\s\S]{0,20}[。！？])/g, '。');
+    t = t.replace(/\b16:\d{2}[\s\S]{0,800}?[。！？]/g, '。');
+    const tail = t.search(/⊹|Date\s*Summary|世界运行报告|玩家状态栏|NPC\s*小剧场|Parallel\s*World|变量更新/);
+    if (tail > t.length * 0.3) t = t.slice(0, tail);
     return t;
   }
   function storyText() {
     const raw = (CURTEXT || lastMessageText() || '').trim();
     if (!raw) return '';
     let body = '';
-    const m = raw.match(/<story_scene>([\s\S]*?)<\/story_scene>/i);
+    const m = raw.match(/<story_scene[^>]*>([\s\S]*?)<\/story_scene>/i);
     if (m) {
       body = m[1];
     } else {
       const at = raw.search(/(^|\n)#{0,3}\s*正文\s*\n/);
       if (at >= 0) {
-        let rest = raw.slice(at).replace(/^[\s\S]*?正文\s*\n/, '');
-        const cut = rest.search(/<(meow_FM|status|wlog|parallel_world|branches|UpdateVariable)/i);
+        const rest = raw.slice(at).replace(/^[\s\S]*?正文\s*\n/, '');
+        const cut = rest.search(/<(meow_FM|status|wlog|parallel_world|branches|UpdateVariable|htm1fenge)/i);
         body = cut >= 0 ? rest.slice(0, cut) : rest;
       } else {
-        body = stripStoryJunk(raw);
+        body = raw;
       }
     }
     body = stripStoryJunk(body);
     body = body.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n');
     body = body.replace(/<[^>]+>/g, '');
-    body = body.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-    return body || raw;   // 抽空就退回原文，别把生成搞没
+    body = cutTailJunk(body);
+    body = body.replace(/[ \t]+/g, ' ');
+    const flat = body.split('\n').length < 3;
+    if (flat) body = explodeLines(body);   // innerText 被压成一行：先按句号/杂项标记炸开
+    if (flat) {
+      const keep = body.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x && !isLeadMeta(x) && !isJunkPara(x); });
+      body = keep.join('\n').trim();
+    } else {
+      let paras = body.split(/\n{2,}/).map(function (p) { return p.trim(); }).filter(Boolean);
+      while (paras.length && isLeadMeta(paras[0])) paras.shift();
+      paras = paras.filter(function (p) { return !isJunkPara(p); });
+      body = paras.join('\n\n').trim();
+    }
+    return body || raw;
   }
   /* ---------- 楼层按钮 ---------- */
   function lastMessageText() {
